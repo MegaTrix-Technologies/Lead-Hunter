@@ -1,0 +1,17 @@
+{
+  "name": "megatrix-leadhunter",
+  "version": "1.0.0",
+  "description": "MegaTrix LeadEngine & CRM - End-to-end B2B GMB Extraction, Email Proposal Engine & Outbound Workstation",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
+    "server": "node backend/server.js",
+    "client": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "seed": "node backend/scripts/seed.js",
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

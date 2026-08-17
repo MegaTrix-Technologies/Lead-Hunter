@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MEGATRIX — White Logo Variant (for Dark / Blue Backgrounds)
+  ════════════════════════════════════════════════════════════
+  Same pixel grid as megatrix-logo.svg, fill changed to #FFFFFF.
+  Transparent background — drop onto any dark surface.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 360 240"
+  shape-rendering="crispEdges"
+  role="img"
+  aria-label="MEGATRIX — Matrix Core System"
+>
+  <title>MEGATRIX</title>
+  <desc>MEGATRIX Matrix Core System — pixel-art MT monogram with wordmark (white variant).</desc>
+
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'Press Start 2P';
+        src: url('https://fonts.gstatic.com/s/pressstart2p/v16/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
+  </defs>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!--  MT. PIXEL MARK  (white)                                      -->
+  <!--  Grid 14×8 | block=18 | gap=2 | step=20                      -->
+  <!--  x₀=41  y₀=24                                                 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+
+  <!-- ROW 0  cols: 0,1,6,7,8,9,10,11,12 -->
+  <rect x="41"  y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="201" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="261" y="24" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="281" y="24" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 1  cols: 0,1,2,5,6,7,8,9,10,11,12 -->
+  <rect x="41"  y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="81"  y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="141" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="201" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="261" y="44" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="281" y="44" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 2  cols: 0,1,2,3,4,5,6,7,9,10 -->
+  <rect x="41"  y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="81"  y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="101" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="121" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="141" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="64" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="64" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 3  cols: 0,1,3,4,6,7,9,10 -->
+  <rect x="41"  y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="101" y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="121" y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="84" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="84" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 4  cols: 0,1,6,7,9,10 -->
+  <rect x="41"  y="104" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="104" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="104" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="104" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="104" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="104" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 5  cols: 0,1,6,7,9,10 -->
+  <rect x="41"  y="124" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="124" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="124" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="124" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="124" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="124" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 6  cols: 0,1,6,7,9,10,12,13 -->
+  <rect x="41"  y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="281" y="144" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="301" y="144" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- ROW 7  cols: 0,1,6,7,9,10,12,13 -->
+  <rect x="41"  y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="61"  y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="161" y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="181" y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="221" y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="241" y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="281" y="164" width="18" height="18" fill="#FFFFFF"/>
+  <rect x="301" y="164" width="18" height="18" fill="#FFFFFF"/>
+
+  <!-- WORDMARK (white) -->
+  <text
+    x="180"
+    y="214"
+    text-anchor="middle"
+    font-family="'Press Start 2P', 'Courier New', monospace"
+    font-size="13"
+    font-weight="normal"
+    letter-spacing="2"
+    textLength="200"
+    lengthAdjust="spacing"
+    fill="#FFFFFF"
+  >MEGATRIX</text>
+
+</svg>

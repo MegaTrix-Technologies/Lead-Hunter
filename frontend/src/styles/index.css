@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #000000;
+    --surface-1: #0A0A0A;
+    --surface-2: #121212;
+    --surface-3: #18181B;
+    --border-color: #262626;
+    --border-subtle: #1F1F1F;
+    --text-primary: #FFFFFF;
+    --text-muted: #A1A1AA;
+  }
+
+  body {
+    background-color: #000000;
+    color: #FFFFFF;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom Pure Dark Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #262626;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3F3F46;
+  }
+}
+
+@layer utilities {
+  .border-glow {
+    box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.25);
+  }
+  .border-glow-green {
+    box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.25);
+  }
+  .border-glow-white {
+    box-shadow: 0 0 20px -5px rgba(255, 255, 255, 0.2);
+  }
+  .pixel-grid-bg {
+    background-image: radial-gradient(#262626 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
