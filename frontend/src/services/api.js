@@ -7,6 +7,17 @@ const api = axios.create({
   }
 });
 
+export const DatasetService = {
+  getDatasets: () => api.get('/datasets'),
+  getDatasetById: (id, params) => api.get(`/datasets/${id}`, { params }),
+  updateDataset: (id, data) => api.patch(`/datasets/${id}`, data),
+  deleteDataset: (id) => api.delete(`/datasets/${id}`),
+  appendLeads: (id, payload) => api.post(`/datasets/${id}/append`, payload),
+  getDatasetQueue: (id) => api.get(`/datasets/${id}/queue`),
+  exportDataset: (id) => api.get(`/datasets/${id}/export`, { responseType: 'blob' }),
+  exportDatasetPdf: (id) => api.get(`/datasets/${id}/export-pdf`, { responseType: 'blob' })
+};
+
 export const LeadService = {
   getLeads: (params) => api.get('/leads', { params }),
   getCallingQueue: (params) => api.get('/leads/queue', { params }),
@@ -21,6 +32,7 @@ export const LeadService = {
 
 export const ScraperService = {
   scrapeLeads: (payload) => api.post('/scraper/scrape', payload),
+  autocompleteArea: (input) => api.get('/scraper/autocomplete-area', { params: { input } }),
   getScrapeJobs: () => api.get('/scraper/jobs')
 };
 

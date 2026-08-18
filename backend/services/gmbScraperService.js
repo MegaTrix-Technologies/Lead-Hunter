@@ -1,8 +1,10 @@
+const axios = require('axios');
 const Lead = require('../models/Lead');
+const Dataset = require('../models/Dataset');
 const ScrapeJob = require('../models/ScrapeJob');
-const crypto = require('crypto');
 
-// Terminal or active contact statuses that must ALWAYS be excluded from extraction
+// Terminal statuses that must ALWAYS be excluded from new extractions
+// NOTE: 'Unreachable' and 'Uncontacted' are explicitly NOT here so they remain retryable
 const EXCLUDED_CALL_STATUSES = [
   'IVR',
   'Receptionist',
@@ -12,196 +14,281 @@ const EXCLUDED_CALL_STATUSES = [
   'Lead / Sale'
 ];
 
-/**
- * Generates realistic GMB-style profiles based on keyword and area
- */
-const generateSimulatedGmbPool = (keyword, area, count = 35) => {
-  const city = area.split(',')[0].trim();
-  const sanitizedCity = city.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  
-  const prefixes = ['Apex', 'Prime', 'Elite', 'Metro', 'Pro', 'Summit', 'Vanguard', 'Precision', 'Crown', 'Golden', 'True', 'Master', 'Benchmark', 'First Choice', 'All-Star', 'Titan', 'United', 'NextGen', 'Direct', 'Signature'];
-  const suffixes = ['Services', 'Solutions', 'Group', 'Specialists', 'Pros', 'Co.', 'Associates', 'Studio', 'Hub', 'Experts', 'Care', 'Works', 'Partners', 'Dynamics', 'Masters'];
-  
-  const streetNames = ['Main St', 'Market St', 'Broadway', 'Oak Ave', 'Maple Rd', 'Washington Blvd', 'Lincoln Ave', 'Pine St', 'Cedar Ln', 'Commerce Dr', 'Industrial Pkwy', 'Center St'];
-
-  const results = [];
-  const now = new Date();
-  
-  for (let i = 0; i < count; i++) {
-    const prefix = prefixes[(i * 3 + 7) % prefixes.length];
-    const suffix = suffixes[(i * 5 + 11) % suffixes.length];
-    const businessName = `${prefix} ${keyword} ${suffix}`;
-    
-    // Deterministic unique placeId
-    const placeHash = crypto.createHash('md5').update(`${businessName}-${area}-${i}`).digest('hex');
-    const placeId = `gmb_${placeHash.substring(0, 16)}`;
-    
-    // Rating distribution from 1.5 to 4.9
-    const ratingValues = [1.8, 2.4, 2.9, 3.1, 3.4, 3.7, 4.0, 4.2, 4.5, 4.8, 2.7, 3.2, 1.9, 4.6];
-    const rating = ratingValues[i % ratingValues.length];
-    const reviewCount = Math.floor((15 + (i * 17)) % 140) + 3;
-
-    // Website logic: ~30% have no website to test noWebsiteOnly filter
-    const hasWebsite = (i % 3 !== 0);
-    const domainName = `${prefix.toLowerCase()}${keyword.replace(/\s+/g, '').toLowerCase()}${sanitizedCity}.com`;
-    const website = hasWebsite ? `https://www.${domainName}` : '';
-    
-    // Email logic: direct contact email
-    const emailPrefixes = ['contact', 'info', 'office', 'service', 'admin', 'hello'];
-    const emailPrefix = emailPrefixes[i % emailPrefixes.length];
-    const email = `${emailPrefix}@${hasWebsite ? domainName : `${prefix.toLowerCase()}${sanitizedCity}.net`}`;
-    
-    // Phone number logic
-    const areaCodes = ['415', '212', '312', '713', '305', '206', '602', '404', '702', '512', '617', '214', '720'];
-    const areaCode = areaCodes[i % areaCodes.length];
-    const phoneMid = String(100 + ((i * 73) % 899));
-    const phoneEnd = String(1000 + ((i * 137) % 8999));
-    const phoneNumber = `+1 (${areaCode}) ${phoneMid}-${phoneEnd}`;
-
-    // Registration date: ~25% registered within last 90 days
-    const isRecent = (i % 4 === 0);
-    const daysAgo = isRecent ? Math.floor(Math.random() * 85) + 2 : Math.floor(Math.random() * 600) + 100;
-    const registeredDate = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000));
-
-    // Address
-    const streetNumber = 100 + (i * 28);
-    const street = streetNames[i % streetNames.length];
-    const address = `${streetNumber} ${street}, ${area}`;
-
-    // Avatar
-    const avatarIndex = (i % 4) + 1;
-    const avatarUrl = `https://images.unsplash.com/photo-1577495508048-b635879837f1?w=150&auto=format&fit=crop&q=80`;
-
-    results.push({
-      placeId,
-      businessName,
-      avatarUrl,
-      rating,
-      reviewCount,
-      phoneNumber,
-      email,
-      website,
-      address,
-      area,
-      category: keyword,
-      registeredDate,
-      callStatus: 'Uncontacted',
-      callNotes: [],
-      emailSentCount: 0,
-      emailHistory: []
-    });
-  }
-
-  return results;
-};
-
-/**
- * Core Scraping & Extraction Engine with Deduplication & Filter Rules
- */
 class GmbScraperService {
   /**
-   * Scrapes and filters GMB profiles according to parameters
+   * Helper to fetch real live Google Places profiles using Places API (New)
+   * Supports fetching 1 to 100 profiles with multi-page token resolution.
    */
-  async scrapeLeads({ keyword, area, noWebsiteOnly = false, recentlyRegistered = false, maxRating = 5.0, strictSearch = true }) {
+  async fetchLiveGooglePlaces(keyword, area, maxResults = 10) {
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.Key;
+    if (!apiKey) {
+      throw new Error('Google Places API key is missing. Please set GOOGLE_PLACES_API_KEY in .env');
+    }
+
+    const textQuery = `${keyword} in ${area}`;
+    const allPlaces = [];
+    let pageToken = null;
+    let pageCount = 0;
+    const boundedMax = Math.min(100, Math.max(1, parseInt(maxResults, 10) || 10));
+    const maxPages = Math.min(5, Math.ceil(boundedMax / 20));
+
+    console.log(`[MegaTrix GMB Live] Executing live search: "${textQuery}" (Max target: ${boundedMax} profiles, max pages: ${maxPages})`);
+
+    while (pageCount < maxPages && allPlaces.length < boundedMax) {
+      pageCount++;
+      const payload = {
+        textQuery,
+        pageSize: Math.min(20, boundedMax - allPlaces.length)
+      };
+
+      if (pageToken) {
+        payload.pageToken = pageToken;
+        await new Promise(resolve => setTimeout(resolve, 1800)); // Google token activation latency
+      }
+
+      try {
+        const response = await axios.post(
+          'https://places.googleapis.com/v1/places:searchText',
+          payload,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.primaryType,places.types,places.photos,nextPageToken'
+            },
+            timeout: 15000
+          }
+        );
+
+        const places = response.data.places || [];
+        allPlaces.push(...places);
+        console.log(`[MegaTrix GMB Live] Page ${pageCount}: Retrieved ${places.length} live places (Total: ${allPlaces.length})`);
+
+        pageToken = response.data.nextPageToken;
+        if (!pageToken || places.length === 0) {
+          break;
+        }
+      } catch (err) {
+        console.error(`[MegaTrix GMB Live] API Error on page ${pageCount}:`, err.response?.data || err.message);
+        if (allPlaces.length > 0) {
+          break;
+        } else {
+          const errMsg = err.response?.data?.error?.message || err.message;
+          throw new Error(`Google Places API Error: ${errMsg}`);
+        }
+      }
+    }
+
+    return allPlaces.slice(0, boundedMax);
+  }
+
+  /**
+   * Scrapes and filters REAL GMB profiles and saves into a named or existing Dataset
+   */
+  async scrapeLeads({ 
+    keyword, 
+    area, 
+    maxResults = 10, 
+    noWebsiteOnly = false, 
+    recentlyRegistered = false, 
+    maxRating = 5.0, 
+    strictSearch = false,
+    datasetId = null,
+    datasetName = null,
+    datasetDescription = ''
+  }) {
     if (!keyword || !area) {
       throw new Error('Keyword/Niche and Area/Location are required parameters.');
     }
 
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.Key;
     const maxRatingNum = parseFloat(maxRating) || 5.0;
     const isNoWebsite = Boolean(noWebsiteOnly);
     const isRecentlyReg = Boolean(recentlyRegistered);
     const isStrict = Boolean(strictSearch);
+    const boundedMax = Math.min(100, Math.max(1, parseInt(maxResults, 10) || 10));
 
-    // 1. Fetch raw candidate pool
-    const rawCandidates = generateSimulatedGmbPool(keyword, area, 40);
-    const totalExtracted = rawCandidates.length;
+    // 1. Determine or create Dataset
+    let targetDataset = null;
+    if (datasetId) {
+      targetDataset = await Dataset.findById(datasetId);
+    }
+    
+    if (!targetDataset) {
+      const generatedName = datasetName && datasetName.trim() 
+        ? datasetName.trim() 
+        : `${keyword} in ${area.split(',')[0].trim()} — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
-    // 2. Query MongoDB for existing records in this area/category or with matching placeIds
+      targetDataset = await Dataset.create({
+        name: generatedName,
+        description: datasetDescription || `Targeting ${keyword} in ${area}`,
+        keyword,
+        area,
+        totalLeads: 0,
+        uncontactedCount: 0,
+        contactedCount: 0,
+        unreachableCount: 0,
+        pipelineCount: 0,
+        closedCount: 0,
+        searchHistory: []
+      });
+    }
+
+    // 2. Fetch real live candidate pool from Google Places API (New)
+    const rawPlaces = await this.fetchLiveGooglePlaces(keyword, area, boundedMax);
+    const totalExtracted = rawPlaces.length;
+
+    if (totalExtracted === 0) {
+      return {
+        dataset: targetDataset,
+        keyword,
+        area,
+        stats: { totalExtracted: 0, totalQualified: 0, totalExcluded: 0 },
+        leads: []
+      };
+    }
+
+    // 3. Map Google Place objects to Lead schema
+    const rawCandidates = rawPlaces.map(place => {
+      const placeId = place.id;
+      const businessName = place.displayName?.text || 'Business';
+      const rating = place.rating || 0;
+      const reviewCount = place.userRatingCount || 0;
+      const phoneNumber = place.nationalPhoneNumber || place.internationalPhoneNumber || '';
+      const website = place.websiteUri || '';
+      const address = place.formattedAddress || area;
+      const category = place.primaryType ? place.primaryType.replace(/_/g, ' ') : keyword;
+      
+      let avatarUrl = '';
+      if (place.photos && place.photos.length > 0 && apiKey) {
+        avatarUrl = `https://places.googleapis.com/v1/${place.photos[0].name}/media?maxHeightPx=300&maxWidthPx=300&key=${apiKey}`;
+      }
+
+      return {
+        placeId,
+        businessName,
+        avatarUrl,
+        rating,
+        reviewCount,
+        phoneNumber,
+        email: '',
+        website,
+        address,
+        area,
+        category,
+        registeredDate: new Date(),
+        callStatus: 'Uncontacted',
+        callNotes: [],
+        emailSentCount: 0,
+        emailHistory: [],
+        datasetId: targetDataset._id,
+        datasetIds: [targetDataset._id]
+      };
+    });
+
+    // 4. Query MongoDB for existing records in this dataset or global terminal exclusions
     const placeIds = rawCandidates.map(c => c.placeId);
     const existingDbLeads = await Lead.find({
       $or: [
         { placeId: { $in: placeIds } },
-        { area: new RegExp(`^${area.split(',')[0].trim()}$`, 'i'), category: new RegExp(`^${keyword.trim()}$`, 'i') }
+        { area: new RegExp(`^${area.split(',')[0].trim()}$`, 'i'), businessName: { $in: rawCandidates.map(c => c.businessName) } }
       ]
     }).lean();
 
     const existingMap = new Map();
     existingDbLeads.forEach(lead => {
-      existingMap.set(lead.placeId, lead);
+      if (lead.placeId) existingMap.set(lead.placeId, lead);
       existingMap.set(`${lead.businessName.toLowerCase()}_${lead.area.toLowerCase()}`, lead);
     });
 
-    // 3. Deduplication & Exclusion Logic
-    // NEVER extract or display businesses previously tagged with terminal or active call statuses
+    // 5. Deduplication & Terminal Status Exclusion Logic
     let totalExcluded = 0;
     const qualifiedList = [];
     const ninetyDaysAgo = new Date(Date.now() - (90 * 24 * 60 * 60 * 1000));
 
     for (const candidate of rawCandidates) {
-      // Check if lead already exists in DB
       const existingInDb = existingMap.get(candidate.placeId) || 
                            existingMap.get(`${candidate.businessName.toLowerCase()}_${candidate.area.toLowerCase()}`);
 
       if (existingInDb) {
-        // If it was already contacted or tagged with any terminal status, completely exclude it!
+        // Exclude only if marked with a terminal status
         if (EXCLUDED_CALL_STATUSES.includes(existingInDb.callStatus)) {
+          totalExcluded++;
+          continue;
+        }
+
+        // If lead already exists in this specific dataset, avoid duplicate
+        if (existingInDb.datasetId && String(existingInDb.datasetId) === String(targetDataset._id)) {
           totalExcluded++;
           continue;
         }
       }
 
-      // 4. Apply Multi-Parameter Filters
-      let passesNoWebsite = true;
-      if (isNoWebsite) {
-        passesNoWebsite = (!candidate.website || candidate.website.trim() === '');
-      }
-
-      let passesRating = true;
-      if (maxRatingNum < 5.0) {
-        passesRating = (candidate.rating <= maxRatingNum);
-      }
-
-      let passesRecent = true;
-      if (isRecentlyReg) {
-        passesRecent = (new Date(candidate.registeredDate) >= ninetyDaysAgo);
-      }
-
-      // Check matching score
-      const passesAllStrict = passesNoWebsite && passesRating && passesRecent;
+      // 6. Apply User Filters
+      const passesNoWebsite = isNoWebsite ? (!candidate.website || candidate.website.trim() === '') : true;
+      const passesRating = (maxRatingNum >= 5.0) ? true : (candidate.rating <= maxRatingNum);
+      const passesRecent = isRecentlyReg ? (new Date(candidate.registeredDate) >= ninetyDaysAgo) : true;
 
       if (isStrict) {
-        if (passesAllStrict) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb } : candidate);
+        if (passesNoWebsite && passesRating && passesRecent) {
+          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
         }
       } else {
-        // Relaxed mode: if strict filters are hard to meet, include leads matching rating and website first
         if (passesNoWebsite && passesRating) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb } : candidate);
+          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
         } else if (passesRating) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb } : candidate);
+          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
+        } else if (!isNoWebsite) {
+          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
         }
       }
     }
 
-    // 5. Persist qualified new leads to DB if they don't already exist
+    // Limit to requested count
+    const cappedQualifiedList = qualifiedList.slice(0, boundedMax);
+
+    // 7. Persist qualified real leads and link to Dataset
     const savedLeads = [];
-    for (const leadData of qualifiedList) {
+    for (const leadData of cappedQualifiedList) {
       try {
-        const existing = await Lead.findOne({ placeId: leadData.placeId });
-        if (!existing) {
-          const newLead = await Lead.create(leadData);
-          savedLeads.push(newLead);
+        let leadDoc = await Lead.findOne({ placeId: leadData.placeId });
+        if (!leadDoc) {
+          leadDoc = await Lead.create(leadData);
         } else {
-          savedLeads.push(existing);
+          // Link existing non-terminal lead to this dataset
+          leadDoc.datasetId = targetDataset._id;
+          if (!leadDoc.datasetIds) leadDoc.datasetIds = [];
+          if (!leadDoc.datasetIds.includes(targetDataset._id)) {
+            leadDoc.datasetIds.push(targetDataset._id);
+          }
+          await leadDoc.save();
         }
+        savedLeads.push(leadDoc);
       } catch (err) {
-        // If duplicate key error, fetch existing
         const existing = await Lead.findOne({ placeId: leadData.placeId });
         if (existing) savedLeads.push(existing);
       }
     }
 
-    // 6. Record Scrape Job History
+    // 8. Update Dataset Metrics
+    const datasetLeads = await Lead.find({ datasetId: targetDataset._id }).lean();
+    targetDataset.totalLeads = datasetLeads.length;
+    targetDataset.uncontactedCount = datasetLeads.filter(l => l.callStatus === 'Uncontacted').length;
+    targetDataset.unreachableCount = datasetLeads.filter(l => l.callStatus === 'Unreachable').length;
+    targetDataset.contactedCount = datasetLeads.filter(l => l.callStatus !== 'Uncontacted').length;
+    targetDataset.pipelineCount = datasetLeads.filter(l => ['Shows Interest', 'Follow Up', 'Lead / Sale'].includes(l.callStatus)).length;
+    targetDataset.closedCount = datasetLeads.filter(l => l.callStatus === 'Lead / Sale').length;
+    
+    targetDataset.searchHistory.push({
+      keyword,
+      area,
+      resultsCount: savedLeads.length,
+      executedAt: new Date()
+    });
+
+    await targetDataset.save();
+
+    // 9. Record Scrape Job History
     const job = await ScrapeJob.create({
       keyword,
       area,
@@ -209,7 +296,8 @@ class GmbScraperService {
         noWebsiteOnly: isNoWebsite,
         recentlyRegistered: isRecentlyReg,
         maxRating: maxRatingNum,
-        strictSearch: isStrict
+        strictSearch: isStrict,
+        maxResults: boundedMax
       },
       totalExtracted,
       totalQualified: savedLeads.length,
@@ -219,6 +307,7 @@ class GmbScraperService {
 
     return {
       jobId: job._id,
+      dataset: targetDataset,
       keyword,
       area,
       filtersApplied: {

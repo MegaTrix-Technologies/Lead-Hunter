@@ -12,16 +12,6 @@ const seedDatabase = async () => {
     await mongoose.connect(uri);
     console.log('[Seed Script] Connected to MongoDB.');
 
-    // Seed Leads
-    for (const leadData of seedLeads) {
-      await Lead.findOneAndUpdate(
-        { placeId: leadData.placeId },
-        leadData,
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
-    console.log(`[Seed Script] Seeded ${seedLeads.length} initial leads into database.`);
-
     // Seed Templates
     const defaultTemplates = [
       {

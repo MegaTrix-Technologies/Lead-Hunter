@@ -1,10 +1,13 @@
 const Lead = require('../models/Lead');
+const Dataset = require('../models/Dataset');
 const ScrapeJob = require('../models/ScrapeJob');
 
 exports.getAnalytics = async (req, res) => {
   try {
     const totalLeads = await Lead.countDocuments();
+    const totalDatasets = await Dataset.countDocuments();
     const uncontactedCount = await Lead.countDocuments({ callStatus: 'Uncontacted' });
+    const unreachableCount = await Lead.countDocuments({ callStatus: 'Unreachable' });
     const ivrCount = await Lead.countDocuments({ callStatus: 'IVR' });
     const receptionistCount = await Lead.countDocuments({ callStatus: 'Receptionist' });
     const dncCount = await Lead.countDocuments({ callStatus: 'Do Not Call' });
@@ -19,6 +22,40 @@ exports.getAnalytics = async (req, res) => {
     // Email stats
     const totalEmailed = await Lead.countDocuments({ emailSentCount: { $gt: 0 } });
     const safetyCappedLeads = await Lead.countDocuments({ emailSentCount: { $gte: 3 } });
+
+    // Dataset Performance Comparison
+    const datasets = await Dataset.find().sort({ createdAt: -1 }).lean();
+    const datasetPerformance = await Promise.all(datasets.map(async (ds) => {
+      const leads = await Lead.find({ datasetId: ds._id }).lean();
+      const dsTotal = leads.length;
+      const dsUncontacted = leads.filter(l => l.callStatus === 'Uncontacted').length;
+      const dsUnreachable = leads.filter(l => l.callStatus === 'Unreachable').length;
+      const dsInterested = leads.filter(l => l.callStatus === 'Shows Interest').length;
+      const dsFollowUp = leads.filter(l => l.callStatus === 'Follow Up').length;
+      const dsConverted = leads.filter(l => l.callStatus === 'Lead / Sale').length;
+      const dsContacted = dsTotal - dsUncontacted;
+
+      const dsConversionRate = dsContacted > 0 ? ((dsConverted / dsContacted) * 100).toFixed(1) : '0.0';
+      const dsInterestRate = dsContacted > 0 ? (((dsInterested + dsFollowUp + dsConverted) / dsContacted) * 100).toFixed(1) : '0.0';
+
+      return {
+        id: ds._id,
+        name: ds.name,
+        description: ds.description || '',
+        keyword: ds.keyword,
+        area: ds.area,
+        totalLeads: dsTotal,
+        uncontacted: dsUncontacted,
+        unreachable: dsUnreachable,
+        contacted: dsContacted,
+        showsInterest: dsInterested,
+        followUp: dsFollowUp,
+        converted: dsConverted,
+        conversionRate: `${dsConversionRate}%`,
+        interestRate: `${dsInterestRate}%`,
+        createdAt: ds.createdAt
+      };
+    }));
 
     // Category breakdown
     const categoryStats = await Lead.aggregate([
@@ -50,9 +87,11 @@ exports.getAnalytics = async (req, res) => {
       success: true,
       data: {
         kpis: {
+          totalDatasets,
           totalLeads,
           totalContacted,
           uncontactedCount,
+          unreachableCount,
           conversionRate: `${conversionRate}%`,
           interestRate: `${interestRate}%`,
           totalEmailed,
@@ -60,6 +99,7 @@ exports.getAnalytics = async (req, res) => {
         },
         statusDistribution: {
           Uncontacted: uncontactedCount,
+          Unreachable: unreachableCount,
           IVR: ivrCount,
           Receptionist: receptionistCount,
           'Do Not Call': dncCount,
@@ -67,6 +107,7 @@ exports.getAnalytics = async (req, res) => {
           'Follow Up': followUpCount,
           'Lead / Sale': convertedCount
         },
+        datasetPerformance,
         categoryStats,
         areaStats,
         ratingBuckets

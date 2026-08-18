@@ -2,7 +2,8 @@ import React from 'react';
 import { useLead } from '../../context/LeadContext';
 import LeadCard from './LeadCard';
 import Pagination from '../common/Pagination';
-import { Send, PhoneCall, CheckSquare, Square, Filter, Database, AlertCircle } from 'lucide-react';
+import { Send, PhoneCall, CheckSquare, Square, Filter, Database, AlertCircle, Layers } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const ScraperResults = () => {
   const { 
@@ -18,6 +19,8 @@ const ScraperResults = () => {
     setCallingQueue,
     setActiveQueueIndex
   } = useLead();
+
+  const { addToast } = useToast();
 
   const handleSelectAllOnPage = () => {
     if (selectedLeadIds.length === leads.length) {
@@ -44,13 +47,34 @@ const ScraperResults = () => {
   };
 
   const handleLaunchColdCalling = () => {
-    const queueToLoad = selectedLeadIds.length > 0
-      ? leads.filter(l => selectedLeadIds.includes(l._id))
-      : leads;
+    let queueToLoad = [];
+
+    if (selectedLeadIds.length > 0) {
+      // Load ONLY the explicitly selected profiles
+      queueToLoad = leads.filter(l => selectedLeadIds.includes(l._id));
+    } else {
+      // If none selected, load current page batch
+      queueToLoad = leads;
+    }
     
+    if (queueToLoad.length === 0) {
+      addToast({
+        title: 'No Profiles Available',
+        message: 'Please extract leads or select profiles to launch the Cold Calling CRM.',
+        type: 'info'
+      });
+      return;
+    }
+
     setCallingQueue(queueToLoad);
     setActiveQueueIndex(0);
     setActiveView('workstation');
+
+    addToast({
+      title: 'Workstation Active',
+      message: `Loaded ${queueToLoad.length} selected profile(s) into Cold Calling CRM.`,
+      type: 'success'
+    });
   };
 
   return (
@@ -85,7 +109,7 @@ const ScraperResults = () => {
         </div>
 
         {/* Action Triggers Bar */}
-        <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+        <div className="flex items-center gap-2.5 w-full md:w-auto justify-end flex-wrap">
           
           {/* Select All on Page */}
           <button
@@ -117,10 +141,14 @@ const ScraperResults = () => {
             type="button"
             onClick={handleLaunchColdCalling}
             disabled={leads.length === 0}
-            className="px-4 py-2 text-xs font-mono font-semibold text-black bg-white hover:bg-zinc-200 border border-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+            className="px-4 py-2 text-xs font-mono font-semibold text-black bg-white hover:bg-zinc-200 border border-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-md"
           >
-            <PhoneCall className="w-3.5 h-3.5 text-black" />
-            <span>Launch Cold Calling Engine</span>
+            <Layers className="w-3.5 h-3.5 text-black" />
+            <span>
+              {selectedLeadIds.length > 0 
+                ? `Launch Calling CRM (${selectedLeadIds.length} Selected)` 
+                : 'Launch Calling CRM (All on Page)'}
+            </span>
           </button>
 
         </div>
@@ -138,20 +166,14 @@ const ScraperResults = () => {
                   <div className="w-1/2 h-3 bg-zinc-800" />
                 </div>
               </div>
-              <div className="h-10 bg-zinc-900" />
-              <div className="h-10 bg-zinc-900" />
+              <div className="space-y-2 pt-2">
+                <div className="w-full h-8 bg-zinc-900" />
+                <div className="w-full h-8 bg-zinc-900" />
+              </div>
             </div>
           ))}
         </div>
-      ) : leads.length === 0 ? (
-        <div className="p-12 text-center bg-[#0A0A0A] border border-[#262626] space-y-3">
-          <Database className="w-8 h-8 text-zinc-600 mx-auto" />
-          <h3 className="text-sm font-semibold text-white font-mono uppercase tracking-wider">No Leads Found</h3>
-          <p className="text-xs text-zinc-400 font-mono max-w-md mx-auto leading-relaxed">
-            No profiles match the active search criteria or all candidates were previously tagged with terminal statuses. Try relaxing the filters above or changing location.
-          </p>
-        </div>
-      ) : (
+      ) : leads.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {leads.map(lead => (
             <LeadCard
@@ -162,13 +184,25 @@ const ScraperResults = () => {
             />
           ))}
         </div>
+      ) : (
+        <div className="bg-[#0A0A0A] border border-[#262626] p-12 text-center space-y-3">
+          <Database className="w-10 h-10 text-zinc-600 mx-auto" />
+          <h3 className="text-base font-bold text-white font-mono uppercase">
+            No Qualified Leads In Current Dataset
+          </h3>
+          <p className="text-xs text-zinc-400 font-mono max-w-md mx-auto leading-relaxed">
+            Execute a new GMB search above to extract live business profiles from Google Maps.
+          </p>
+        </div>
       )}
 
-      {/* Pagination Bar */}
-      <Pagination
-        pagination={pagination}
-        onPageChange={(page) => fetchLeads(page)}
-      />
+      {/* Server-Side Pagination (Strictly 10 profiles per page) */}
+      {leads.length > 0 && (
+        <Pagination
+          pagination={pagination}
+          onPageChange={(page) => fetchLeads(page)}
+        />
+      )}
 
     </div>
   );

@@ -3,6 +3,7 @@ import React from 'react';
 const StatusBadge = ({ status = 'Uncontacted', className = '', size = 'md' }) => {
   const styles = {
     'Uncontacted': 'bg-zinc-900/80 text-zinc-400 border-zinc-800',
+    'Unreachable': 'bg-orange-950/40 text-orange-400 border-orange-800/60',
     'IVR': 'bg-purple-950/40 text-purple-400 border-purple-800/60',
     'Receptionist': 'bg-amber-950/40 text-amber-400 border-amber-800/60',
     'Do Not Call': 'bg-rose-950/40 text-rose-400 border-rose-800/60',

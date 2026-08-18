@@ -61,10 +61,10 @@ const LeadSchema = new mongoose.Schema({
     default: Date.now 
   },
   
-  // Outbound Calling Engine State
+  // Outbound Calling Engine State (includes Unreachable as retryable status)
   callStatus: {
     type: String,
-    enum: ['Uncontacted', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'],
+    enum: ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'],
     default: 'Uncontacted',
     index: true
   },
@@ -104,6 +104,19 @@ const LeadSchema = new mongoose.Schema({
     default: null
   },
 
+  // Dataset Association
+  datasetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Dataset',
+    index: true,
+    default: null
+  },
+  datasetIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Dataset',
+    index: true
+  }],
+
   // Extraction Job Reference
   scrapeJobId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -118,5 +131,6 @@ const LeadSchema = new mongoose.Schema({
 LeadSchema.index({ callStatus: 1, emailSentCount: 1 });
 LeadSchema.index({ area: 1, category: 1 });
 LeadSchema.index({ businessName: 1, area: 1 });
+LeadSchema.index({ datasetId: 1, callStatus: 1 });
 
 module.exports = mongoose.model('Lead', LeadSchema);

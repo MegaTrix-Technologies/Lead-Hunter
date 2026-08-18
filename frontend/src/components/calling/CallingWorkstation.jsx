@@ -13,16 +13,16 @@ import {
   ChevronRight, 
   Send, 
   CheckCircle2, 
-  PhoneCall, 
-  PhoneOff, 
   Clock, 
-  UserCheck, 
-  AlertCircle, 
   MessageSquare, 
   History, 
   Search,
   ExternalLink,
-  Plus
+  Save,
+  Check,
+  CalendarCheck,
+  XCircle,
+  Layers
 } from 'lucide-react';
 
 const CallingWorkstation = () => {
@@ -35,18 +35,27 @@ const CallingWorkstation = () => {
     fetchCallingQueue,
     loadingQueue,
     setIsCampaignModalOpen,
-    setSelectedLeadIds
+    setSelectedLeadIds,
+    datasets,
+    activeDatasetId,
+    activeDataset,
+    loadDatasetQueue
   } = useLead();
 
   const [queueSearch, setQueueSearch] = useState('');
   const [currentNote, setCurrentNote] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
-  const [isCallingActive, setIsCallingActive] = useState(false);
-  const [callTimer, setCallTimer] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   // Status definitions with descriptive labels
   const callStatusOptions = [
+    { 
+      id: 'Unreachable', 
+      label: 'Unreachable', 
+      desc: 'No Answer / Line Busy / Retry Later (Non-Terminal)', 
+      color: 'border-orange-600/80 bg-orange-950/30 text-orange-300 hover:bg-orange-900/40' 
+    },
     { 
       id: 'IVR', 
       label: 'IVR', 
@@ -74,7 +83,7 @@ const CallingWorkstation = () => {
     { 
       id: 'Follow Up', 
       label: 'Follow Up', 
-      desc: 'Callback Requested / Set Date', 
+      desc: 'Callback Requested / Schedule Date', 
       color: 'border-yellow-600/80 bg-yellow-950/30 text-yellow-300 hover:bg-yellow-900/40' 
     },
     { 
@@ -89,8 +98,8 @@ const CallingWorkstation = () => {
     'Left Voicemail',
     'Spoke to Owner',
     'Gatekeeper Refused Transfer',
-    'Requested Email Deck',
-    'Callback Tomorrow 2PM',
+    'Requested Email Proposal',
+    'Callback Scheduled',
     'Disconnected / Bad Number',
     'High-Value Deal Opportunity'
   ];
@@ -104,25 +113,10 @@ const CallingWorkstation = () => {
       setSelectedStatus(activeLead.callStatus || 'Uncontacted');
       setFollowUpDate(activeLead.followUpDate ? new Date(activeLead.followUpDate).toISOString().slice(0, 16) : '');
       setCurrentNote('');
-      setIsCallingActive(false);
-      setCallTimer(0);
     }
   }, [activeLead]);
 
-  // Call timer simulation
-  useEffect(() => {
-    let interval = null;
-    if (isCallingActive) {
-      interval = setInterval(() => {
-        setCallTimer(prev => prev + 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isCallingActive]);
-
-  // Hotkey navigation
+  // Hotkey navigation (ArrowLeft: Prev, ArrowRight: Next)
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Don't trigger if typing in textarea or input
@@ -136,7 +130,35 @@ const CallingWorkstation = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeQueueIndex, callingQueue.length]);
+  }, [activeQueueIndex, callingQueue.length, selectedStatus, currentNote, followUpDate]);
+
+  /**
+   * Save changes to current lead without automatically jumping
+   */
+  const handleSaveCurrent = async (advance = false) => {
+    if (!activeLead) return;
+    setSaving(true);
+
+    try {
+      const noteToSave = currentNote.trim();
+      await updateCallStatus(
+        activeLead._id, 
+        selectedStatus, 
+        noteToSave, 
+        selectedStatus === 'Follow Up' ? followUpDate : null
+      );
+
+      setCurrentNote('');
+
+      if (advance && activeQueueIndex < callingQueue.length - 1) {
+        setActiveQueueIndex(prev => prev + 1);
+      }
+    } catch (err) {
+      console.error('Error saving call status:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handlePrev = () => {
     if (activeQueueIndex > 0) {
@@ -150,26 +172,6 @@ const CallingWorkstation = () => {
     }
   };
 
-  const handleApplyStatusAndAdvance = async (statusId) => {
-    if (!activeLead) return;
-    setSelectedStatus(statusId);
-
-    const noteToSave = currentNote.trim();
-    await updateCallStatus(activeLead._id, statusId, noteToSave, statusId === 'Follow Up' ? followUpDate : null);
-
-    setCurrentNote('');
-    // Auto-advance to next lead if available
-    if (activeQueueIndex < callingQueue.length - 1) {
-      setActiveQueueIndex(prev => prev + 1);
-    }
-  };
-
-  const handleSaveNoteOnly = async () => {
-    if (!activeLead || !currentNote.trim()) return;
-    await addCallNote(activeLead._id, currentNote.trim());
-    setCurrentNote('');
-  };
-
   const handleQuickTag = (tag) => {
     setCurrentNote(prev => prev ? `${prev} | ${tag}` : tag);
   };
@@ -180,10 +182,58 @@ const CallingWorkstation = () => {
     setIsCampaignModalOpen(true);
   };
 
-  const formatTimer = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  /**
+   * Quick Date & Time Presets for Follow-Up
+   */
+  const setFollowUpPreset = (preset) => {
+    const now = new Date();
+    let target = new Date();
+
+    switch (preset) {
+      case '2hours':
+        target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        break;
+      case 'tomorrow_9am':
+        target.setDate(now.getDate() + 1);
+        target.setHours(9, 0, 0, 0);
+        break;
+      case 'tomorrow_2pm':
+        target.setDate(now.getDate() + 1);
+        target.setHours(14, 0, 0, 0);
+        break;
+      case 'in_2days':
+        target.setDate(now.getDate() + 2);
+        target.setHours(10, 0, 0, 0);
+        break;
+      case 'next_monday':
+        const day = now.getDay();
+        const diff = (day === 0 ? 1 : 8 - day);
+        target.setDate(now.getDate() + diff);
+        target.setHours(10, 0, 0, 0);
+        break;
+    }
+
+    // Format to YYYY-MM-DDTHH:mm local timezone
+    const tzOffset = target.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(target - tzOffset)).toISOString().slice(0, 16);
+    setFollowUpDate(localISOTime);
+  };
+
+  const formatScheduledDate = (isoStr) => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return isoStr;
+    }
   };
 
   // Filter queue by search
@@ -195,18 +245,57 @@ const CallingWorkstation = () => {
 
   if (callingQueue.length === 0 && !loadingQueue) {
     return (
-      <div className="bg-[#0A0A0A] border border-[#262626] p-12 text-center space-y-4">
-        <PhoneCall className="w-12 h-12 text-zinc-600 mx-auto" />
-        <h3 className="text-lg font-bold text-white font-mono uppercase">Calling Queue Empty</h3>
-        <p className="text-xs text-zinc-400 font-mono max-w-md mx-auto leading-relaxed">
-          There are currently no leads in the active dialing queue. Extract leads from the GMB Extractor tab or load leads from the Leads Database.
-        </p>
-        <button
-          onClick={() => fetchCallingQueue()}
-          className="px-6 py-2.5 bg-white text-black font-mono text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors"
-        >
-          Load All Uncontacted Leads
-        </button>
+      <div className="bg-[#0A0A0A] border border-[#262626] p-10 sm:p-14 text-center space-y-6 max-w-3xl mx-auto my-8">
+        <div className="w-16 h-16 rounded-full bg-[#121216] border border-[#262626] flex items-center justify-center mx-auto text-blue-400">
+          <Layers className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-lg font-bold text-white font-mono uppercase tracking-wide">
+            Calling Workstation Queue Not Initialized
+          </h3>
+          <p className="text-xs text-zinc-400 font-mono max-w-lg mx-auto leading-relaxed">
+            No specific batch of leads has been dispatched to the calling queue yet. Extract a targeted batch from the GMB Extractor or initialize the queue from your current database.
+          </p>
+        </div>
+
+        {/* Database Overview Card */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-[#050505] border border-[#1E1E1E] text-left max-w-md mx-auto">
+          <div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase">Total in DB</div>
+            <div className="text-sm font-bold font-mono text-white mt-0.5">{pagination.totalLeads}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase">Uncontacted</div>
+            <div className="text-sm font-bold font-mono text-blue-400 mt-0.5">{statusCounts.Uncontacted || 0}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono text-zinc-500 uppercase">In Pipeline</div>
+            <div className="text-sm font-bold font-mono text-emerald-400 mt-0.5">
+              {(statusCounts['Shows Interest'] || 0) + (statusCounts['Follow Up'] || 0) + (statusCounts['Lead / Sale'] || 0)}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Triggers */}
+        <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
+          <button
+            type="button"
+            onClick={() => setActiveView('scraper')}
+            className="px-6 py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-white border border-[#333333] hover:border-white font-mono text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer"
+          >
+            ← Go to GMB Extractor
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fetchCallingQueue()}
+            disabled={pagination.totalLeads === 0}
+            className="px-6 py-2.5 bg-white text-black hover:bg-zinc-200 border border-white font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-40 shadow-lg"
+          >
+            Initialize Queue ({statusCounts.Uncontacted || pagination.totalLeads} Leads)
+          </button>
+        </div>
       </div>
     );
   }
@@ -215,18 +304,39 @@ const CallingWorkstation = () => {
     <div className="flex flex-col lg:flex-row gap-6 items-start">
       
       {/* ─── LEFT SIDEBAR: Calling Queue List ─────────────────────────────────── */}
-      <div className="w-full lg:w-[380px] shrink-0 bg-[#0A0A0A] border border-[#262626] flex flex-col h-[820px]">
+      <div className="w-full lg:w-[360px] shrink-0 bg-[#0A0A0A] border border-[#262626] flex flex-col h-[840px]">
         
-        {/* Queue Header & Search */}
+        {/* Queue Header, Dataset Switcher & Search */}
         <div className="p-4 border-b border-[#222222] bg-[#0E0E0E] space-y-3">
-          <div className="flex items-center justify-between">
+          
+          {/* Dataset Switcher */}
+          {datasets.length > 0 && (
+            <div>
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
+                Active Dataset / Campaign
+              </label>
+              <select
+                value={activeDatasetId || ''}
+                onChange={(e) => e.target.value && loadDatasetQueue(e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white text-xs font-mono focus:border-white focus:outline-none truncate"
+              >
+                {datasets.map(ds => (
+                  <option key={ds._id} value={ds._id}>
+                    {ds.name} ({ds.totalLeads} leads)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-blue-500 rounded-none" />
               <h3 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
                 Outbound Queue ({callingQueue.length})
               </h3>
             </div>
-            <span className="text-[11px] font-mono text-zinc-500">
+            <span className="text-[11px] font-mono text-zinc-400">
               #{activeQueueIndex + 1} of {callingQueue.length}
             </span>
           </div>
@@ -261,7 +371,7 @@ const CallingWorkstation = () => {
                     : 'hover:bg-[#0F0F0F] bg-transparent'
                 }`}
               >
-                {/* Index & Avatar */}
+                {/* Index */}
                 <div className="text-[11px] font-mono text-zinc-600 w-5 text-right shrink-0 pt-0.5">
                   {idx + 1}
                 </div>
@@ -294,9 +404,9 @@ const CallingWorkstation = () => {
         </div>
       </div>
 
-      {/* ─── CENTER/RIGHT: Main High-Visibility Dialing Workstation ────────── */}
+      {/* ─── CENTER/RIGHT: Main Outbound Workstation Card ───────────────────── */}
       {activeLead ? (
-        <div className="flex-1 w-full bg-[#0A0A0A] border border-[#262626] flex flex-col h-[820px] overflow-y-auto">
+        <div className="flex-1 w-full bg-[#0A0A0A] border border-[#262626] flex flex-col h-[840px] overflow-y-auto">
           
           {/* Main Top Header: Business Profile Hero */}
           <div className="p-6 border-b border-[#222222] bg-gradient-to-b from-[#101010] to-[#0A0A0A]">
@@ -304,7 +414,7 @@ const CallingWorkstation = () => {
               
               {/* Left Profile Info */}
               <div className="flex items-start gap-4">
-                <div className="w-16 h-16 bg-[#161616] border border-[#333333] shrink-0 flex items-center justify-center overflow-hidden">
+                <div className="w-14 h-14 bg-[#161616] border border-[#333333] shrink-0 flex items-center justify-center overflow-hidden">
                   {activeLead.avatarUrl ? (
                     <img 
                       src={activeLead.avatarUrl} 
@@ -343,32 +453,12 @@ const CallingWorkstation = () => {
                 </div>
               </div>
 
-              {/* Live Dialing Action Center */}
-              <div className="flex items-center gap-3">
-                {isCallingActive ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsCallingActive(false)}
-                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-bold uppercase flex items-center gap-2 border border-rose-400 animate-pulse cursor-pointer"
-                  >
-                    <PhoneOff className="w-4 h-4" />
-                    <span>Hang Up ({formatTimer(callTimer)})</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsCallingActive(true)}
-                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase flex items-center gap-2 border border-emerald-400 cursor-pointer shadow-lg"
-                  >
-                    <PhoneCall className="w-4 h-4" />
-                    <span>Start Call</span>
-                  </button>
-                )}
-
+              {/* Action Buttons: Send Proposal & Quick Copy */}
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={handleSendSingleProposal}
-                  className="px-4 py-2.5 bg-[#141414] hover:bg-[#1F1F1F] text-blue-400 font-mono text-xs font-medium border border-[#2B2B2B] hover:border-blue-500 flex items-center gap-2 transition-all cursor-pointer"
+                  className="px-4 py-2 bg-[#141414] hover:bg-[#1F1F1F] text-blue-400 font-mono text-xs font-medium border border-[#2B2B2B] hover:border-blue-500 flex items-center gap-2 transition-all cursor-pointer"
                 >
                   <Mail className="w-4 h-4" />
                   <span>Send Proposal</span>
@@ -377,7 +467,7 @@ const CallingWorkstation = () => {
 
             </div>
 
-            {/* Direct Contacts Contact Bar */}
+            {/* Direct Contacts Contact Bar (Clean 1-Click Clipboard Copies) */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-5 border-t border-[#1C1C1C]">
               
               {/* Phone Card */}
@@ -387,14 +477,14 @@ const CallingWorkstation = () => {
                     <Phone className="w-3.5 h-3.5 text-blue-400" />
                   </div>
                   <div>
-                    <div className="text-[10px] text-zinc-500 font-mono uppercase">Direct Phone</div>
-                    <a href={`tel:${activeLead.phoneNumber}`} className="text-xs font-mono font-bold text-white hover:text-blue-400">
-                      {activeLead.phoneNumber || 'N/A'}
-                    </a>
+                    <div className="text-[10px] text-zinc-500 font-mono uppercase">Phone Number</div>
+                    <div className="text-xs font-mono font-bold text-white">
+                      {activeLead.phoneNumber || 'No phone listed'}
+                    </div>
                   </div>
                 </div>
                 {activeLead.phoneNumber && (
-                  <ClipboardButton text={activeLead.phoneNumber} label="" />
+                  <ClipboardButton text={activeLead.phoneNumber} label="Copy" />
                 )}
               </div>
 
@@ -406,13 +496,13 @@ const CallingWorkstation = () => {
                   </div>
                   <div className="min-w-0">
                     <div className="text-[10px] text-zinc-500 font-mono uppercase">Direct Email</div>
-                    <div className="text-xs font-mono font-bold text-white truncate max-w-[140px]">
-                      {activeLead.email || 'N/A'}
+                    <div className="text-xs font-mono font-bold text-white truncate max-w-[130px]">
+                      {activeLead.email || 'No direct email'}
                     </div>
                   </div>
                 </div>
                 {activeLead.email && (
-                  <ClipboardButton text={activeLead.email} label="" />
+                  <ClipboardButton text={activeLead.email} label="Copy" />
                 )}
               </div>
 
@@ -443,7 +533,7 @@ const CallingWorkstation = () => {
                     href={activeLead.website.startsWith('http') ? activeLead.website : `https://${activeLead.website}`} 
                     target="_blank" 
                     rel="noreferrer"
-                    className="p-1 border border-[#262626] bg-[#0A0A0A] hover:bg-[#1A1A1A] text-zinc-400 hover:text-white"
+                    className="p-1.5 border border-[#262626] bg-[#0A0A0A] hover:bg-[#1A1A1A] text-zinc-400 hover:text-white transition-colors"
                   >
                     <ExternalLink className="w-3 h-3" />
                   </a>
@@ -453,18 +543,18 @@ const CallingWorkstation = () => {
             </div>
           </div>
 
-          {/* Interactive Section: Status Grid + Note Logger */}
+          {/* Interactive Workstation Form Area */}
           <div className="p-6 space-y-6 flex-1">
             
-            {/* 1. Call Status Selector Grid */}
+            {/* 1. Call Status Selector Grid (NO auto-advance on click) */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-400 inline-block" />
-                  Select Call Status (Instant Save &amp; Advance)
+                  <span className="w-2 h-2 bg-blue-500 inline-block" />
+                  Select Lead Status
                 </label>
                 <span className="text-[11px] font-mono text-zinc-500">
-                  Clicking a status updates MongoDB &amp; moves to next profile
+                  Selected status stays active until you save
                 </span>
               </div>
 
@@ -476,16 +566,16 @@ const CallingWorkstation = () => {
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => handleApplyStatusAndAdvance(opt.id)}
+                      onClick={() => setSelectedStatus(opt.id)}
                       className={`p-3.5 border text-left transition-all relative flex flex-col justify-between h-20 cursor-pointer ${
                         isSelected 
-                          ? `${opt.color} ring-1 ring-white` 
+                          ? `${opt.color} ring-2 ring-white shadow-lg` 
                           : 'border-[#262626] bg-[#000000] hover:border-zinc-500 text-zinc-300'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-mono font-bold">{opt.label}</span>
-                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-current" />}
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-current shrink-0" />}
                       </div>
                       <p className="text-[10px] font-mono text-zinc-400 leading-tight">
                         {opt.desc}
@@ -495,38 +585,109 @@ const CallingWorkstation = () => {
                 })}
               </div>
 
-              {/* Follow-up Date/Time Selector if Follow Up is active */}
+              {/* ─── 2. Enhanced Follow-Up Date & Time Scheduler ───────────────── */}
               {selectedStatus === 'Follow Up' && (
-                <div className="mt-3 p-3 bg-[#111115] border border-yellow-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-xs font-mono text-yellow-300">
-                    <Calendar className="w-4 h-4" />
-                    <span>Set Scheduled Follow-Up Date &amp; Time:</span>
+                <div className="mt-4 p-4 bg-[#0D0D12] border border-yellow-800/60 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-mono font-bold text-yellow-300 uppercase">
+                      <Calendar className="w-4 h-4 text-yellow-400" />
+                      <span>Follow-Up Scheduler</span>
+                    </div>
+
+                    {followUpDate && (
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpDate('')}
+                        className="text-[11px] font-mono text-zinc-500 hover:text-rose-400 flex items-center gap-1"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Clear</span>
+                      </button>
+                    )}
                   </div>
-                  <input
-                    type="datetime-local"
-                    value={followUpDate}
-                    onChange={(e) => setFollowUpDate(e.target.value)}
-                    className="px-3 py-1.5 bg-[#000000] border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-yellow-400"
-                  />
+
+                  {/* Quick Preset Buttons */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-mono text-zinc-400">Quick Presets:</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpPreset('2hours')}
+                        className="px-2.5 py-1 text-xs font-mono bg-[#141414] border border-zinc-700 hover:border-yellow-400 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        +2 Hours
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpPreset('tomorrow_9am')}
+                        className="px-2.5 py-1 text-xs font-mono bg-[#141414] border border-zinc-700 hover:border-yellow-400 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Tomorrow 9:00 AM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpPreset('tomorrow_2pm')}
+                        className="px-2.5 py-1 text-xs font-mono bg-[#141414] border border-zinc-700 hover:border-yellow-400 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Tomorrow 2:00 PM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpPreset('in_2days')}
+                        className="px-2.5 py-1 text-xs font-mono bg-[#141414] border border-zinc-700 hover:border-yellow-400 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        In 2 Days
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFollowUpPreset('next_monday')}
+                        className="px-2.5 py-1 text-xs font-mono bg-[#141414] border border-zinc-700 hover:border-yellow-400 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Next Monday 10:00 AM
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Manual Date & Time Picker */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-yellow-950/60">
+                    <div>
+                      <label className="block text-[10px] font-mono text-zinc-400 uppercase mb-1">
+                        Select Exact Date &amp; Time
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={followUpDate}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#000000] border border-yellow-700/60 text-xs font-mono text-white focus:outline-none focus:border-yellow-400"
+                      />
+                    </div>
+
+                    <div className="flex flex-col justify-end">
+                      {followUpDate ? (
+                        <div className="p-2 bg-yellow-950/40 border border-yellow-800/60 text-xs font-mono text-yellow-300 flex items-center gap-2">
+                          <CalendarCheck className="w-4 h-4 text-yellow-400 shrink-0" />
+                          <span className="truncate">
+                            Scheduled: <strong>{formatScheduledDate(followUpDate)}</strong>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-[#050505] border border-zinc-800 text-xs font-mono text-zinc-500">
+                          Select a date/time above
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* 2. Call Notes & Quick Tags */}
+            {/* 3. Call Notes & Quick Tags */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
                   <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
-                  Call Log &amp; Workstation Notes
+                  Conversation Log &amp; Workstation Notes
                 </label>
-                <button
-                  type="button"
-                  onClick={handleSaveNoteOnly}
-                  disabled={!currentNote.trim()}
-                  className="px-3 py-1 bg-white text-black font-mono text-[11px] font-bold uppercase tracking-wider hover:bg-zinc-200 disabled:opacity-40 cursor-pointer"
-                >
-                  Save Note
-                </button>
               </div>
 
               {/* Quick Tags Toolbar */}
@@ -549,25 +710,25 @@ const CallingWorkstation = () => {
                 rows={3}
                 value={currentNote}
                 onChange={(e) => setCurrentNote(e.target.value)}
-                placeholder="Enter detailed call conversation summary, owner intent, objection notes, or next steps..."
+                placeholder="Enter call notes, objections, owner contact details, or next action steps..."
                 className="w-full p-3 bg-[#000000] border border-[#262626] text-xs font-mono text-white placeholder-zinc-600 focus:outline-none focus:border-white transition-colors"
               />
             </div>
 
-            {/* 3. Historical Interaction Timeline */}
+            {/* 4. Historical Interaction Timeline */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-2 text-xs font-mono font-bold text-zinc-400 uppercase tracking-wider">
                 <History className="w-3.5 h-3.5 text-zinc-500" />
                 <span>Interaction Timeline ({activeLead.callNotes?.length || 0} Notes, {activeLead.emailHistory?.length || 0} Emails)</span>
               </div>
 
-              <div className="space-y-2 max-h-44 overflow-y-auto pr-2">
+              <div className="space-y-2 max-h-36 overflow-y-auto pr-2">
                 {/* Notes History */}
                 {activeLead.callNotes && activeLead.callNotes.length > 0 ? (
                   activeLead.callNotes.slice().reverse().map((item, idx) => (
                     <div key={idx} className="p-3 bg-[#0E0E0E] border border-[#1E1E1E] text-xs font-mono space-y-1">
                       <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                        <span className="text-blue-400 font-semibold">{item.author || 'Agent'}</span>
+                        <span className="text-blue-400 font-semibold">{item.author || 'Sales Desk'}</span>
                         <span>{new Date(item.timestamp).toLocaleString()}</span>
                       </div>
                       <p className="text-zinc-300 text-xs leading-relaxed">{item.note}</p>
@@ -575,7 +736,7 @@ const CallingWorkstation = () => {
                   ))
                 ) : (
                   <div className="p-3 bg-[#070707] border border-[#1A1A1A] text-xs font-mono text-zinc-600 text-center">
-                    No previous call logs recorded for this lead yet.
+                    No previous logs recorded for this lead yet.
                   </div>
                 )}
 
@@ -598,37 +759,56 @@ const CallingWorkstation = () => {
 
           </div>
 
-          {/* Bottom Workstation Queue Navigation Footer */}
-          <div className="p-4 border-t border-[#222222] bg-[#070707] flex items-center justify-between">
+          {/* ─── EXPLICIT SAVE & NAVIGATION ACTION FOOTER ─────────────────────── */}
+          <div className="p-4 border-t border-[#222222] bg-[#070707] flex flex-col sm:flex-row items-center justify-between gap-3">
+            
+            {/* Left: Previous Profile Button */}
             <button
               type="button"
               onClick={handlePrev}
               disabled={activeQueueIndex === 0}
-              className="px-4 py-2 bg-[#121212] border border-[#2B2B2B] hover:bg-[#1C1C1C] hover:border-zinc-500 text-zinc-300 hover:text-white font-mono text-xs flex items-center gap-2 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2.5 bg-[#121212] border border-[#2B2B2B] hover:bg-[#1C1C1C] hover:border-zinc-500 text-zinc-300 hover:text-white font-mono text-xs flex items-center justify-center gap-2 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-all"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Previous Profile [P]</span>
             </button>
 
-            <div className="text-xs font-mono text-zinc-500">
-              Profile <span className="text-white font-bold">{activeQueueIndex + 1}</span> of <span className="text-white font-bold">{callingQueue.length}</span>
+            {/* Center: Profile Index & Status Indicator */}
+            <div className="text-xs font-mono text-zinc-400 flex items-center gap-2">
+              <span>Profile <strong className="text-white">{activeQueueIndex + 1}</strong> of <strong className="text-white">{callingQueue.length}</strong></span>
+              <span>•</span>
+              <span className="text-zinc-500">Status: <strong className="text-blue-400">{selectedStatus}</strong></span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={activeQueueIndex === callingQueue.length - 1}
-              className="px-4 py-2 bg-white text-black hover:bg-zinc-200 border border-white font-mono text-xs font-bold flex items-center gap-2 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-            >
-              <span>Next Profile [N]</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {/* Right: Save Changes and Save & Next Buttons */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => handleSaveCurrent(false)}
+                disabled={saving}
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-[#171717] hover:bg-[#222222] text-white border border-zinc-700 font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Save className="w-3.5 h-3.5 text-blue-400" />
+                <span>{saving ? 'Saving...' : 'Save'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSaveCurrent(true)}
+                disabled={saving}
+                className="flex-1 sm:flex-none px-6 py-2.5 bg-white text-black hover:bg-zinc-200 border border-white font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg"
+              >
+                <span>{activeQueueIndex === callingQueue.length - 1 ? 'Save Record' : 'Save & Next [N]'}</span>
+                <ChevronRight className="w-4 h-4 text-black" />
+              </button>
+            </div>
+
           </div>
 
         </div>
       ) : (
         <div className="flex-1 bg-[#0A0A0A] border border-[#262626] p-12 text-center text-zinc-500 font-mono text-sm">
-          Select a profile from the left queue to begin dialing.
+          Select a profile from the left queue to begin.
         </div>
       )}
 

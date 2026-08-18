@@ -156,8 +156,8 @@ const LeadCard = ({ lead, isSelected, onToggleSelect }) => {
           onClick={handleLaunchDialer}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-mono font-medium text-white bg-[#141414] border border-[#2B2B2B] hover:bg-white hover:text-black hover:border-white transition-all cursor-pointer"
         >
-          <PhoneCall className="w-3.5 h-3.5" />
-          <span>Dial Lead</span>
+          <ExternalLink className="w-3.5 h-3.5" />
+          <span>Open in CRM</span>
         </button>
 
         <button

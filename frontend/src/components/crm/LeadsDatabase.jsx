@@ -55,7 +55,7 @@ const LeadsDatabase = () => {
     reviewCount: 20
   });
 
-  const statuses = ['ALL', 'Uncontacted', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
+  const statuses = ['ALL', 'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
 
   const handleFilterStatus = (status) => {
     const newFilters = { ...filters, status };
@@ -375,10 +375,10 @@ const LeadsDatabase = () => {
                             setActiveQueueIndex(0);
                             setActiveView('workstation');
                           }}
-                          title="Dial in Workstation"
+                          title="Open Profile in Workstation"
                           className="p-1.5 bg-[#141414] hover:bg-white hover:text-black text-zinc-400 border border-[#2B2B2B] transition-colors cursor-pointer"
                         >
-                          <PhoneCall className="w-3.5 h-3.5" />
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </button>
 
                         <button

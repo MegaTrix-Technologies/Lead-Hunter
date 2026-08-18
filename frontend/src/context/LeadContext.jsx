@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { LeadService, ScraperService, EmailService, AnalyticsService } from '../services/api';
+import { LeadService, DatasetService, ScraperService, EmailService, AnalyticsService } from '../services/api';
 import { useToast } from './ToastContext';
 
 const LeadContext = createContext(null);
@@ -10,6 +10,12 @@ export const LeadProvider = ({ children }) => {
   // Navigation & View State
   const [activeView, setActiveView] = useState('scraper'); // 'scraper' | 'workstation' | 'email' | 'crm' | 'kanban' | 'analytics'
   
+  // Datasets State
+  const [datasets, setDatasets] = useState([]);
+  const [activeDatasetId, setActiveDatasetId] = useState(null);
+  const [activeDataset, setActiveDataset] = useState(null);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+
   // Leads & Pagination State (strictly 10 profiles per page)
   const [leads, setLeads] = useState([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
@@ -23,6 +29,7 @@ export const LeadProvider = ({ children }) => {
   });
   const [statusCounts, setStatusCounts] = useState({
     Uncontacted: 0,
+    Unreachable: 0,
     IVR: 0,
     Receptionist: 0,
     'Do Not Call': 0,
@@ -47,17 +54,41 @@ export const LeadProvider = ({ children }) => {
   const [activeQueueIndex, setActiveQueueIndex] = useState(0);
   const [loadingQueue, setLoadingQueue] = useState(false);
 
-  // Bulk Selection State for Campaigns
+  // Bulk Selection State
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
 
   // Scraper State
   const [scraping, setScraping] = useState(false);
   const [lastScrapeStats, setLastScrapeStats] = useState(null);
 
+  // Append Modal State
+  const [appendModalDataset, setAppendModalDataset] = useState(null);
+
   // Email Campaign Modal & Live Report State
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [activeDeliveryReport, setActiveDeliveryReport] = useState(null);
   const [isDeliveryReportOpen, setIsDeliveryReportOpen] = useState(false);
+
+  /**
+   * Fetch All Datasets
+   */
+  const fetchDatasets = useCallback(async () => {
+    setLoadingDatasets(true);
+    try {
+      const res = await DatasetService.getDatasets();
+      if (res.data.success) {
+        setDatasets(res.data.data);
+        if (!activeDatasetId && res.data.data.length > 0) {
+          setActiveDatasetId(res.data.data[0]._id);
+          setActiveDataset(res.data.data[0]);
+        }
+      }
+    } catch (error) {
+      console.error('[LeadContext] fetchDatasets error:', error);
+    } finally {
+      setLoadingDatasets(false);
+    }
+  }, [activeDatasetId]);
 
   /**
    * Fetch leads with current filters and pagination
@@ -91,7 +122,133 @@ export const LeadProvider = ({ children }) => {
   }, [pagination.currentPage, filters, addToast]);
 
   /**
-   * Fetch Calling Queue
+   * Update Dataset (Name & Description)
+   */
+  const updateDataset = async (datasetId, { name, description }) => {
+    try {
+      const res = await DatasetService.updateDataset(datasetId, { name, description });
+      if (res.data.success) {
+        setDatasets(prev => prev.map(d => d._id === datasetId ? { ...d, name: res.data.data.name, description: res.data.data.description } : d));
+        if (activeDatasetId === datasetId) {
+          setActiveDataset(prev => ({ ...prev, name: res.data.data.name, description: res.data.data.description }));
+        }
+        addToast({
+          title: 'Dataset Updated',
+          message: `Saved changes to "${res.data.data.name}".`,
+          type: 'success',
+          duration: 2000
+        });
+        return res.data.data;
+      }
+    } catch (error) {
+      console.error('[LeadContext] updateDataset error:', error);
+      addToast({
+        title: 'Update Failed',
+        message: error.response?.data?.message || error.message,
+        type: 'error'
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Delete Dataset
+   */
+  const deleteDataset = async (datasetId) => {
+    try {
+      const res = await DatasetService.deleteDataset(datasetId);
+      if (res.data.success) {
+        setDatasets(prev => prev.filter(d => d._id !== datasetId));
+        if (activeDatasetId === datasetId) {
+          setActiveDatasetId(null);
+          setActiveDataset(null);
+          setCallingQueue([]);
+        }
+        addToast({
+          title: 'Dataset Deleted',
+          message: res.data.message,
+          type: 'info'
+        });
+        await fetchLeads(1);
+      }
+    } catch (error) {
+      console.error('[LeadContext] deleteDataset error:', error);
+      addToast({
+        title: 'Deletion Failed',
+        message: error.response?.data?.message || error.message,
+        type: 'error'
+      });
+    }
+  };
+
+  /**
+   * Load a specific Dataset into the Cold Calling Workstation queue
+   */
+  const loadDatasetQueue = async (datasetId) => {
+    setLoadingQueue(true);
+    try {
+      const res = await DatasetService.getDatasetQueue(datasetId);
+      if (res.data.success) {
+        setCallingQueue(res.data.data);
+        setActiveQueueIndex(0);
+        setActiveDatasetId(datasetId);
+        setActiveDataset(res.data.dataset);
+        setActiveView('workstation');
+
+        addToast({
+          title: 'Workstation Loaded',
+          message: `Loaded ${res.data.data.length} profiles from "${res.data.dataset.name}" into Cold Calling CRM.`,
+          type: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('[LeadContext] loadDatasetQueue error:', error);
+      addToast({
+        title: 'Error loading queue',
+        message: error.message,
+        type: 'error'
+      });
+    } finally {
+      setLoadingQueue(false);
+    }
+  };
+
+  /**
+   * Append newly extracted leads to an existing dataset
+   */
+  const appendLeadsToDataset = async (datasetId, searchParams) => {
+    setScraping(true);
+    try {
+      const res = await DatasetService.appendLeads(datasetId, searchParams);
+      if (res.data.success) {
+        addToast({
+          title: 'Leads Appended',
+          message: `Added ${res.data.data.stats.totalQualified} new verified leads. Excluded ${res.data.data.stats.totalExcluded} duplicates.`,
+          type: 'success',
+          duration: 4000
+        });
+        await fetchDatasets();
+        await fetchLeads(1);
+        if (activeDatasetId === datasetId) {
+          await loadDatasetQueue(datasetId);
+        }
+        return res.data.data;
+      }
+    } catch (error) {
+      console.error('[LeadContext] appendLeadsToDataset error:', error);
+      addToast({
+        title: 'Append Failed',
+        message: error.response?.data?.message || error.message,
+        type: 'error'
+      });
+      throw error;
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  /**
+   * Fetch Calling Queue from DB on manual initialize
    */
   const fetchCallingQueue = useCallback(async (customParams = {}) => {
     setLoadingQueue(true);
@@ -100,13 +257,23 @@ export const LeadProvider = ({ children }) => {
       if (res.data.success) {
         setCallingQueue(res.data.data);
         setActiveQueueIndex(0);
+        addToast({
+          title: 'Queue Initialized',
+          message: `Loaded ${res.data.data.length} uncontacted leads into Cold Calling CRM.`,
+          type: 'success'
+        });
       }
     } catch (error) {
       console.error('[LeadContext] fetchCallingQueue error:', error);
+      addToast({
+        title: 'Failed to load queue',
+        message: error.message,
+        type: 'error'
+      });
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [addToast]);
 
   /**
    * Update Call Status & Sync
@@ -135,8 +302,9 @@ export const LeadProvider = ({ children }) => {
           duration: 2500
         });
 
-        // Refresh counts
+        // Refresh counts & datasets
         fetchLeads(pagination.currentPage, filters);
+        fetchDatasets();
         return updatedLead;
       }
     } catch (error) {
@@ -178,23 +346,36 @@ export const LeadProvider = ({ children }) => {
   };
 
   /**
-   * Run GMB Scrape & Extraction
+   * Run GMB Scrape & Extraction (Creates a new Dataset)
    */
   const executeScrape = async (searchParams) => {
     setScraping(true);
     try {
       const res = await ScraperService.scrapeLeads(searchParams);
       if (res.data.success) {
+        const extractedLeads = res.data.data.leads || [];
+        const dataset = res.data.data.dataset;
         setLastScrapeStats(res.data.data.stats);
+        
+        if (dataset) {
+          setActiveDatasetId(dataset._id);
+          setActiveDataset(dataset);
+        }
+
+        if (extractedLeads.length > 0) {
+          setCallingQueue(extractedLeads);
+          setActiveQueueIndex(0);
+        }
+
         addToast({
-          title: 'Extraction Complete',
-          message: `Discovered ${res.data.data.stats.totalQualified} qualified leads. Excluded ${res.data.data.stats.totalExcluded} terminal/duplicate profiles.`,
+          title: 'Dataset Created',
+          message: `Created "${dataset?.name || 'Dataset'}" with ${res.data.data.stats.totalQualified} qualified leads. Excluded ${res.data.data.stats.totalExcluded} terminal/duplicates.`,
           type: 'success',
           duration: 5000
         });
-        // Refresh leads list to page 1
+
+        await fetchDatasets();
         await fetchLeads(1);
-        await fetchCallingQueue();
         return res.data.data;
       }
     } catch (error) {
@@ -212,14 +393,27 @@ export const LeadProvider = ({ children }) => {
 
   // Initial load
   useEffect(() => {
+    fetchDatasets();
     fetchLeads(1);
-    fetchCallingQueue();
   }, []);
 
   return (
     <LeadContext.Provider value={{
       activeView,
       setActiveView,
+      datasets,
+      activeDatasetId,
+      setActiveDatasetId,
+      activeDataset,
+      setActiveDataset,
+      loadingDatasets,
+      fetchDatasets,
+      updateDataset,
+      deleteDataset,
+      loadDatasetQueue,
+      appendLeadsToDataset,
+      appendModalDataset,
+      setAppendModalDataset,
       leads,
       loadingLeads,
       pagination,
@@ -228,6 +422,7 @@ export const LeadProvider = ({ children }) => {
       setFilters,
       fetchLeads,
       callingQueue,
+      setCallingQueue,
       activeQueueIndex,
       setActiveQueueIndex,
       loadingQueue,

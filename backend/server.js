@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const connectDB = require('./config/db');
 
 const leadRoutes = require('./routes/leadRoutes');
+const datasetRoutes = require('./routes/datasetRoutes');
 const scraperRoutes = require('./routes/scraperRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
@@ -25,6 +26,7 @@ app.use(morgan('dev'));
 
 // API Routes
 app.use('/api/leads', leadRoutes);
+app.use('/api/datasets', datasetRoutes);
 app.use('/api/scraper', scraperRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -66,6 +68,7 @@ const startServer = async () => {
     console.log(`  📡 API Server: http://localhost:${PORT}`);
     console.log(`  ⚡ Endpoints:`);
     console.log(`     - /api/leads`);
+    console.log(`     - /api/datasets`);
     console.log(`     - /api/scraper`);
     console.log(`     - /api/email`);
     console.log(`     - /api/analytics`);

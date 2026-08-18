@@ -88,6 +88,7 @@ exports.getLeads = async (req, res) => {
 
     const statusMap = {
       Uncontacted: 0,
+      Unreachable: 0,
       IVR: 0,
       Receptionist: 0,
       'Do Not Call': 0,
@@ -175,7 +176,7 @@ exports.updateCallStatus = async (req, res) => {
     const { id } = req.params;
     const { callStatus, note, followUpDate } = req.body;
 
-    const validStatuses = ['Uncontacted', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
+    const validStatuses = ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
     if (callStatus && !validStatuses.includes(callStatus)) {
       return res.status(400).json({ success: false, message: 'Invalid call status provided.' });
     }

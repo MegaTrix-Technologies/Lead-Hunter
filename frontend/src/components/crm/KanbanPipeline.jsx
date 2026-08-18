@@ -123,10 +123,10 @@ const KanbanPipeline = () => {
                     <div className="flex items-center justify-between pt-2 border-t border-[#1C1C1C] text-xs">
                       <button
                         onClick={() => handleDial(lead)}
-                        className="px-2 py-1 bg-[#141414] hover:bg-white hover:text-black text-zinc-400 border border-[#262626] text-[10px] font-mono flex items-center gap-1 cursor-pointer"
+                        className="px-2 py-1 bg-[#141414] hover:bg-white hover:text-black text-zinc-400 border border-[#262626] text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <PhoneCall className="w-3 h-3" />
-                        <span>Dial</span>
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Open</span>
                       </button>
 
                       {/* Quick Shift Dropdown */}
