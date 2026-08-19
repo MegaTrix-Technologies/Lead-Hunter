@@ -15,6 +15,9 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Ensure DB connection is initiated for serverless invocations
+connectDB().catch(err => console.error('[MegaTrix DB] Serverless init connect error:', err.message));
+
 // Middleware
 app.use(cors({
   origin: '*',
@@ -43,8 +46,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve frontend in production if built
-if (process.env.NODE_ENV === 'production') {
+// Serve frontend in production if built locally
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   const frontendBuild = path.join(__dirname, '../frontend/dist');
   app.use(express.static(frontendBuild));
   app.get('*', (req, res) => {
@@ -63,7 +66,6 @@ app.use((err, req, res, next) => {
 });
 
 const startServer = () => {
-  connectDB().catch(err => console.error('[MegaTrix DB] Connect catch:', err.message));
   app.listen(PORT, () => {
     console.log(`\n======================================================`);
     console.log(`  🚀 MegaTrix LeadEngine & CRM Backend Active`);
@@ -79,4 +81,8 @@ const startServer = () => {
   });
 };
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+module.exports = app;
