@@ -8,8 +8,18 @@
     "server": "node backend/server.js",
     "client": "npm run dev --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "seed": "node backend/scripts/seed.js",
     "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "nodemailer": "^6.9.16",
+    "pdfkit": "^0.19.1"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
