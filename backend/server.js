@@ -16,7 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Ensure DB connection is initiated for serverless invocations
-connectDB().catch(err => console.error('[MegaTrix DB] Serverless init connect error:', err.message));
+connectDB().catch(err => console.error('[MegaTrix DB] Connect catch:', err.message));
 
 // Middleware
 app.use(cors({
