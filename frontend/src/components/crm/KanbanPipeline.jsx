@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLead } from '../../context/LeadContext';
 import { LeadService } from '../../services/api';
 import RatingStars from '../common/RatingStars';
-import { PhoneCall, Mail, Phone, Globe, ChevronRight, UserCheck } from 'lucide-react';
+import { PhoneCall, Mail, Phone, Globe, ChevronRight, UserCheck, ExternalLink } from 'lucide-react';
 
 const KanbanPipeline = () => {
   const { updateCallStatus, setCallingQueue, setActiveQueueIndex, setActiveView, setIsCampaignModalOpen, setSelectedLeadIds } = useLead();

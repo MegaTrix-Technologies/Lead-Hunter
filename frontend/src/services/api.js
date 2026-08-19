@@ -7,6 +7,10 @@ const api = axios.create({
   }
 });
 
+export const AuthService = {
+  login: (credentials) => api.post('/auth/login', credentials)
+};
+
 export const DatasetService = {
   getDatasets: () => api.get('/datasets'),
   getDatasetById: (id, params) => api.get(`/datasets/${id}`, { params }),
@@ -46,7 +50,8 @@ export const EmailService = {
 };
 
 export const AnalyticsService = {
-  getAnalytics: () => api.get('/analytics')
+  getAnalytics: () => api.get('/analytics'),
+  getQuotas: () => api.get('/analytics/quotas')
 };
 
 export default api;

@@ -5,6 +5,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
 
+const authRoutes = require('./routes/authRoutes');
 const leadRoutes = require('./routes/leadRoutes');
 const datasetRoutes = require('./routes/datasetRoutes');
 const scraperRoutes = require('./routes/scraperRoutes');
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/datasets', datasetRoutes);
 app.use('/api/scraper', scraperRoutes);
@@ -60,13 +62,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-const startServer = async () => {
-  await connectDB();
+const startServer = () => {
+  connectDB().catch(err => console.error('[MegaTrix DB] Connect catch:', err.message));
   app.listen(PORT, () => {
     console.log(`\n======================================================`);
     console.log(`  🚀 MegaTrix LeadEngine & CRM Backend Active`);
     console.log(`  📡 API Server: http://localhost:${PORT}`);
     console.log(`  ⚡ Endpoints:`);
+    console.log(`     - /api/auth`);
     console.log(`     - /api/leads`);
     console.log(`     - /api/datasets`);
     console.log(`     - /api/scraper`);

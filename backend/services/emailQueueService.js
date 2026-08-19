@@ -13,19 +13,32 @@ class EmailQueueService extends EventEmitter {
   }
 
   initTransporter() {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT, 10) || 587,
-        secure: process.env.SMTP_PORT == '465',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
-      console.log('[MegaTrix Email] SMTP Transport configured.');
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+
+    if (host && user && pass) {
+      try {
+        this.transporter = nodemailer.createTransport({
+          host,
+          port,
+          secure: port === 465, // true for 465, false for 587/25
+          auth: {
+            user,
+            pass
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+        console.log(`[MegaTrix Email] Real SMTP Transport connected via ${host}:${port} (${user})`);
+      } catch (err) {
+        console.error('[MegaTrix Email] Failed to initialize SMTP transport:', err.message);
+        this.transporter = null;
+      }
     } else {
-      console.log('[MegaTrix Email] Running in Simulated/Direct Dispatch Mode with detailed live event reporting.');
+      console.log('[MegaTrix Email] Running in Simulated/Direct Dispatch Mode (No SMTP credentials configured).');
     }
   }
 
@@ -56,7 +69,7 @@ class EmailQueueService extends EventEmitter {
   /**
    * Processes a bulk email proposal campaign
    */
-  async processCampaign({ leadIds, templateId, customSubject, customBody, sendDelayMs = 400 }) {
+  async processCampaign({ leadIds, templateId, customSubject, customBody, sendDelayMs = 500 }) {
     if (this.isProcessing) {
       throw new Error('A campaign is currently actively processing in the queue.');
     }
@@ -90,6 +103,10 @@ class EmailQueueService extends EventEmitter {
 
     this.activeJob = report;
 
+    const fromAddress = process.env.FROM_EMAIL || process.env.SMTP_USER || 'sales@megatrixai.com';
+    const fromName = process.env.FROM_NAME || 'MegaTrix Technologies';
+    const replyToAddress = process.env.REPLY_TO || 'sales@megatrixai.com';
+
     // Run async batch worker
     (async () => {
       try {
@@ -103,11 +120,11 @@ class EmailQueueService extends EventEmitter {
             timestamp: new Date()
           };
 
-          // 1. Check Safety Cap: If emailSentCount >= 3, block further transmissions!
-          if (lead.emailSentCount >= 3) {
+          // 1. Check Previous Delivery: If emailSentCount > 0, skip sending again to prevent duplicate emails!
+          if (lead.emailSentCount && lead.emailSentCount > 0) {
             report.safetyCappedBlocked++;
-            logEntry.status = 'blocked';
-            logEntry.reason = `Safety Cap Enforced: Lead already received ${lead.emailSentCount} proposals (Max: 3).`;
+            logEntry.status = 'already_sent';
+            logEntry.reason = `Proposal already sent previously on ${lead.lastEmailedAt ? new Date(lead.lastEmailedAt).toLocaleDateString() : 'earlier run'}. Skipped to prevent duplicates.`;
             report.logs.push(logEntry);
             this.emit('progress', { progress: Math.round(((i + 1) / leads.length) * 100), report, current: logEntry });
             await new Promise(r => setTimeout(r, 100));
@@ -129,35 +146,53 @@ class EmailQueueService extends EventEmitter {
           const personalizedSubject = this.interpolate(rawSubject, lead);
           const personalizedHtml = this.interpolate(rawBody, lead);
 
-          // 4. Rate-limiting simulated/live dispatch
+          // 4. Rate-limiting interval
           await new Promise(r => setTimeout(r, sendDelayMs));
 
-          // Simulated realistic email server response
-          const randomFactor = Math.random();
           let dispatchStatus = 'sent';
 
-          if (randomFactor < 0.04) {
-            // 4% Bounce simulation
-            dispatchStatus = 'bounced';
-            report.droppedBounced++;
-            logEntry.status = 'bounced';
-            logEntry.reason = 'Mailbox unavailable / SMTP 550 recipient rejected';
-          } else if (randomFactor < 0.06) {
-            // 2% Spam filter simulation
-            dispatchStatus = 'spam';
-            report.spamFiltered++;
-            logEntry.status = 'spam';
-            logEntry.reason = 'Recipient server domain policy rejected message';
+          // 5. LIVE SMTP TRANSMISSION (Brevo / Zoho / Custom SMTP)
+          if (this.transporter) {
+            try {
+              const mailOptions = {
+                from: `"${fromName}" <${fromAddress}>`,
+                to: lead.email.trim(),
+                replyTo: replyToAddress,
+                subject: personalizedSubject,
+                html: personalizedHtml
+              };
+
+              const info = await this.transporter.sendMail(mailOptions);
+              dispatchStatus = 'sent';
+              report.successfullySent++;
+              logEntry.status = 'sent';
+              logEntry.subject = personalizedSubject;
+              logEntry.reason = `Delivered via SMTP (${info.messageId || 'OK'}) • Replies route to ${replyToAddress}`;
+            } catch (smtpErr) {
+              console.error(`[MegaTrix Email] SMTP error for "${lead.email}":`, smtpErr.message);
+              dispatchStatus = 'bounced';
+              report.droppedBounced++;
+              logEntry.status = 'bounced';
+              logEntry.reason = `SMTP Transmission Error: ${smtpErr.message}`;
+            }
           } else {
-            // Success
-            dispatchStatus = 'sent';
-            report.successfullySent++;
-            logEntry.status = 'sent';
-            logEntry.subject = personalizedSubject;
-            logEntry.reason = 'Dispatched successfully via MegaTrix Proposal Gateway';
+            // Simulated fallback mode when no SMTP credentials are in .env
+            const randomFactor = Math.random();
+            if (randomFactor < 0.03) {
+              dispatchStatus = 'bounced';
+              report.droppedBounced++;
+              logEntry.status = 'bounced';
+              logEntry.reason = 'Simulated: Mailbox unavailable / SMTP 550 recipient rejected';
+            } else {
+              dispatchStatus = 'sent';
+              report.successfullySent++;
+              logEntry.status = 'sent';
+              logEntry.subject = personalizedSubject;
+              logEntry.reason = `Simulated: Dispatched successfully (Configure Brevo/Zoho in .env for live sending)`;
+            }
           }
 
-          // 5. Update Lead record in MongoDB
+          // 6. Update Lead record in MongoDB
           await Lead.findByIdAndUpdate(lead._id, {
             $inc: { emailSentCount: dispatchStatus === 'sent' ? 1 : 0 },
             $push: {

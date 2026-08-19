@@ -7,7 +7,18 @@ const ScrapeJob = require('../models/ScrapeJob');
  */
 exports.scrapeLeads = async (req, res) => {
   try {
-    const { keyword, area, noWebsiteOnly, recentlyRegistered, maxRating, strictSearch } = req.body;
+    const { 
+      keyword, 
+      area, 
+      maxResults, 
+      noWebsiteOnly, 
+      recentlyRegistered, 
+      maxRating, 
+      strictSearch,
+      datasetId,
+      datasetName,
+      datasetDescription
+    } = req.body;
 
     if (!keyword || !area) {
       return res.status(400).json({ 
@@ -16,13 +27,21 @@ exports.scrapeLeads = async (req, res) => {
       });
     }
 
+    const targetMax = Math.min(100, Math.max(1, parseInt(maxResults, 10) || 10));
+
+    console.log(`[Scraper Controller] Incoming scrape request: "${keyword}" in "${area}" — Target Count: ${targetMax}`);
+
     const result = await gmbScraperService.scrapeLeads({
       keyword,
       area,
+      maxResults: targetMax,
       noWebsiteOnly: noWebsiteOnly === true || noWebsiteOnly === 'true',
       recentlyRegistered: recentlyRegistered === true || recentlyRegistered === 'true',
       maxRating: parseFloat(maxRating) || 5.0,
-      strictSearch: strictSearch === true || strictSearch === 'true'
+      strictSearch: strictSearch === true || strictSearch === 'true',
+      datasetId,
+      datasetName,
+      datasetDescription
     });
 
     res.json({
@@ -99,15 +118,21 @@ exports.autocompleteArea = async (req, res) => {
 /**
  * Get historical extraction jobs
  */
-exports.getScrapeJobs = async (req, res) => {
+exports.getScrapeHistory = async (req, res) => {
   try {
     const jobs = await ScrapeJob.find()
       .sort({ createdAt: -1 })
-      .limit(20)
+      .limit(30)
       .lean();
 
-    res.json({ success: true, data: jobs });
+    res.json({
+      success: true,
+      data: jobs
+    });
   } catch (error) {
+    console.error('[Scraper Controller] getScrapeHistory error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.getScrapeJobs = exports.getScrapeHistory;

@@ -1,14 +1,65 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { LeadService, DatasetService, ScraperService, EmailService, AnalyticsService } from '../services/api';
 import { useToast } from './ToastContext';
 
 const LeadContext = createContext(null);
 
+const VIEW_TO_PATH = {
+  scraper: '/Gmb-Extractor',
+  workstation: '/Cold-Calling',
+  email: '/Email-Proposals',
+  crm: '/Leads-Database',
+  kanban: '/Sales-Pipeline',
+  analytics: '/Analytics',
+  settings: '/Settings'
+};
+
+const PATH_TO_VIEW = {
+  '/': 'scraper',
+  '/gmb-extractor': 'scraper',
+  '/scraper': 'scraper',
+  '/cold-calling': 'workstation',
+  '/workstation': 'workstation',
+  '/email-proposals': 'email',
+  '/email': 'email',
+  '/leads-database': 'crm',
+  '/crm': 'crm',
+  '/sales-pipeline': 'kanban',
+  '/kanban': 'kanban',
+  '/analytics': 'analytics',
+  '/settings': 'settings',
+  '/limits-and-credits': 'settings'
+};
+
+const getViewFromPath = (pathname) => {
+  if (!pathname) return 'scraper';
+  const normalized = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  return PATH_TO_VIEW[normalized] || 'scraper';
+};
+
 export const LeadProvider = ({ children }) => {
   const { addToast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   
-  // Navigation & View State
-  const [activeView, setActiveView] = useState('scraper'); // 'scraper' | 'workstation' | 'email' | 'crm' | 'kanban' | 'analytics'
+  // Navigation & View State synced with URL path
+  const [activeView, _setActiveView] = useState(() => getViewFromPath(window.location.pathname));
+
+  // Sync activeView on browser back/forward buttons or direct URL change
+  useEffect(() => {
+    const matchedView = getViewFromPath(location.pathname);
+    _setActiveView(matchedView);
+  }, [location.pathname]);
+
+  // When changing view programmatically, update state & URL path
+  const setActiveView = useCallback((view) => {
+    _setActiveView(view);
+    const targetPath = VIEW_TO_PATH[view] || '/Gmb-Extractor';
+    if (location.pathname.toLowerCase() !== targetPath.toLowerCase()) {
+      navigate(targetPath);
+    }
+  }, [location.pathname, navigate]);
   
   // Datasets State
   const [datasets, setDatasets] = useState([]);
@@ -66,6 +117,7 @@ export const LeadProvider = ({ children }) => {
 
   // Email Campaign Modal & Live Report State
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const [campaignDatasetLeads, setCampaignDatasetLeads] = useState([]);
   const [activeDeliveryReport, setActiveDeliveryReport] = useState(null);
   const [isDeliveryReportOpen, setIsDeliveryReportOpen] = useState(false);
 
@@ -436,6 +488,8 @@ export const LeadProvider = ({ children }) => {
       executeScrape,
       isCampaignModalOpen,
       setIsCampaignModalOpen,
+      campaignDatasetLeads,
+      setCampaignDatasetLeads,
       activeDeliveryReport,
       setActiveDeliveryReport,
       isDeliveryReportOpen,

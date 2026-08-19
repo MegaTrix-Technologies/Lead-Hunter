@@ -335,14 +335,16 @@ const EmailTemplateEditor = () => {
                 <span>Rendered Email Client Preview</span>
                 <span className="text-emerald-400 font-medium">Interpolated with Sample Lead</span>
               </div>
-              <div className="flex-1 p-6 overflow-y-auto">
-                <div className="mb-4 pb-3 border-b border-[#222222] font-mono text-xs">
-                  <div className="text-zinc-500">Subject: <span className="text-white font-semibold">{renderPreview(subject)}</span></div>
-                  <div className="text-zinc-600 text-[11px] mt-0.5">To: <span className="text-zinc-400">contact@apexroofingmiami.com</span></div>
-                </div>
-                <div 
-                  className="bg-transparent"
-                  dangerouslySetInnerHTML={{ __html: renderPreview(bodyHtml) }}
+              <div className="p-4 bg-[#0A0A0A] border-b border-[#1A1A1A] font-mono text-xs">
+                <div className="text-zinc-500">Subject: <span className="text-white font-semibold">{renderPreview(subject)}</span></div>
+                <div className="text-zinc-600 text-[11px] mt-0.5">To: <span className="text-zinc-400">contact@apexroofingmiami.com</span></div>
+              </div>
+              <div className="flex-1 w-full bg-[#07090E] overflow-hidden">
+                <iframe
+                  title="Email Preview"
+                  srcDoc={renderPreview(bodyHtml)}
+                  className="w-full h-full border-0 bg-transparent"
+                  sandbox="allow-same-origin"
                 />
               </div>
             </div>

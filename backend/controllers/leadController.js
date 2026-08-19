@@ -11,6 +11,14 @@ exports.getLeads = async (req, res) => {
 
     const query = {};
 
+    // Filter by Dataset ID
+    if (req.query.datasetId) {
+      query.$or = [
+        { datasetId: req.query.datasetId },
+        { datasetIds: req.query.datasetId }
+      ];
+    }
+
     // Filter by call status
     if (req.query.status && req.query.status !== 'ALL') {
       query.callStatus = req.query.status;

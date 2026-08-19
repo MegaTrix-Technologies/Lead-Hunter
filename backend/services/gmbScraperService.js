@@ -32,13 +32,13 @@ class GmbScraperService {
     const boundedMax = Math.min(100, Math.max(1, parseInt(maxResults, 10) || 10));
     const maxPages = Math.min(5, Math.ceil(boundedMax / 20));
 
-    console.log(`[MegaTrix GMB Live] Executing live search: "${textQuery}" (Max target: ${boundedMax} profiles, max pages: ${maxPages})`);
+    console.log(`[MegaTrix GMB Live] Executing live search: "${textQuery}" (Target: ${boundedMax} profiles, max pages: ${maxPages})`);
 
     while (pageCount < maxPages && allPlaces.length < boundedMax) {
       pageCount++;
       const payload = {
         textQuery,
-        pageSize: Math.min(20, boundedMax - allPlaces.length)
+        pageSize: 20
       };
 
       if (pageToken) {
@@ -134,7 +134,7 @@ class GmbScraperService {
       });
     }
 
-    // 2. Fetch real live candidate pool from Google Places API (New)
+    // 2. Fetch real live candidate pool from Google Places API
     const rawPlaces = await this.fetchLiveGooglePlaces(keyword, area, boundedMax);
     const totalExtracted = rawPlaces.length;
 
@@ -152,7 +152,7 @@ class GmbScraperService {
     const rawCandidates = rawPlaces.map(place => {
       const placeId = place.id;
       const businessName = place.displayName?.text || 'Business';
-      const rating = place.rating || 0;
+      const rating = typeof place.rating === 'number' ? place.rating : 0;
       const reviewCount = place.userRatingCount || 0;
       const phoneNumber = place.nationalPhoneNumber || place.internationalPhoneNumber || '';
       const website = place.websiteUri || '';
@@ -224,23 +224,24 @@ class GmbScraperService {
         }
       }
 
-      // 6. Apply User Filters
+      // 6. Apply User Filters (Strictly and accurately!)
       const passesNoWebsite = isNoWebsite ? (!candidate.website || candidate.website.trim() === '') : true;
       const passesRating = (maxRatingNum >= 5.0) ? true : (candidate.rating <= maxRatingNum);
       const passesRecent = isRecentlyReg ? (new Date(candidate.registeredDate) >= ninetyDaysAgo) : true;
-
+      
+      let passesStrict = true;
       if (isStrict) {
-        if (passesNoWebsite && passesRating && passesRecent) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
-        }
+        const kw = keyword.toLowerCase().trim();
+        const bName = (candidate.businessName || '').toLowerCase();
+        const bCat = (candidate.category || '').toLowerCase();
+        passesStrict = bName.includes(kw) || bCat.includes(kw);
+      }
+
+      // Candidate must pass ALL active criteria
+      if (passesNoWebsite && passesRating && passesRecent && passesStrict) {
+        qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
       } else {
-        if (passesNoWebsite && passesRating) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
-        } else if (passesRating) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
-        } else if (!isNoWebsite) {
-          qualifiedList.push(existingInDb ? { ...candidate, ...existingInDb, datasetId: targetDataset._id } : candidate);
-        }
+        totalExcluded++;
       }
     }
 
