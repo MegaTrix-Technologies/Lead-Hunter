@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "MegaTrix LeadEngine & CRM - End-to-end B2B GMB Extraction, Email Proposal Engine & Outbound Workstation",
   "main": "backend/server.js",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
     "server": "node backend/server.js",
-    "client": "npm run dev --prefix frontend",
-    "build": "npm install --prefix frontend && npm run build --prefix frontend",
-    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend"
+    "client": "npm run dev --workspace=frontend",
+    "build": "npm run build --prefix frontend",
+    "install:all": "npm install"
   },
   "dependencies": {
     "axios": "^1.7.9",
