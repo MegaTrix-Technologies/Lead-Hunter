@@ -7,8 +7,34 @@ const api = axios.create({
   }
 });
 
+// Attach Authorization Bearer token to all outbound requests
+api.interceptors.request.use((config) => {
+  try {
+    const session = localStorage.getItem('megatrix_auth_session');
+    if (session) {
+      const parsed = JSON.parse(session);
+      if (parsed?.token) {
+        config.headers.Authorization = `Bearer ${parsed.token}`;
+      }
+    }
+  } catch (e) {
+    // Ignore parse error
+  }
+  return config;
+}, (error) => Promise.reject(error));
+
 export const AuthService = {
-  login: (credentials) => api.post('/auth/login', credentials)
+  login: (credentials) => api.post('/auth/login', credentials),
+  getMe: () => api.get('/auth/me'),
+  changePassword: (data) => api.post('/auth/change-password', data)
+};
+
+export const UserService = {
+  getUsers: () => api.get('/users'),
+  createUser: (data) => api.post('/users', data),
+  updateUser: (id, data) => api.patch(`/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/users/${id}`),
+  getUsageBreakdown: () => api.get('/users/usage-breakdown')
 };
 
 export const DatasetService = {
@@ -37,7 +63,8 @@ export const LeadService = {
 export const ScraperService = {
   scrapeLeads: (payload) => api.post('/scraper/scrape', payload),
   autocompleteArea: (input) => api.get('/scraper/autocomplete-area', { params: { input } }),
-  getScrapeJobs: () => api.get('/scraper/jobs')
+  getScrapeJobs: () => api.get('/scraper/jobs'),
+  getQuota: () => api.get('/scraper/quota')
 };
 
 export const EmailService = {
@@ -52,6 +79,13 @@ export const EmailService = {
 export const AnalyticsService = {
   getAnalytics: () => api.get('/analytics'),
   getQuotas: () => api.get('/analytics/quotas')
+};
+
+export const ProductService = {
+  getProducts: () => api.get('/products'),
+  createProduct: (data) => api.post('/products', data),
+  updateProduct: (id, data) => api.patch(`/products/${id}`, data),
+  deleteProduct: (id) => api.delete(`/products/${id}`)
 };
 
 export default api;

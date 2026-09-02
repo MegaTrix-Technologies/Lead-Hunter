@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Loader2, Lock, Clock, CheckCircle2 } from 'lucide-react';
+import { X, Search, Loader2, Lock, Clock, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
 import { useLead } from '../../context/LeadContext';
+import { useAuth } from '../../context/AuthContext';
 
 const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
   const { appendLeadsToDataset, scraping } = useLead();
+  const { isSuperAdmin, quota, refreshUser } = useAuth();
+
+  const remainingToday = isSuperAdmin ? 999999 : (quota?.remainingToday !== undefined ? quota.remainingToday : 150);
 
   const [maxResults, setMaxResults] = useState(10);
   const [noWebsiteOnly, setNoWebsiteOnly] = useState(false);
@@ -21,13 +25,14 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
 
   useEffect(() => {
     if (isOpen) {
-      setMaxResults(10);
+      const initialMax = !isSuperAdmin ? Math.min(10, Math.max(0, remainingToday)) : 10;
+      setMaxResults(initialMax);
       setHoverText('');
       setProgress(0);
       setProgressStage('');
       setElapsedTime(0);
     }
-  }, [isOpen]);
+  }, [isOpen, isSuperAdmin, remainingToday]);
 
   useEffect(() => {
     let interval = null;
@@ -80,19 +85,23 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!dataset) return;
+    if (!dataset || (!isSuperAdmin && remainingToday <= 0)) return;
 
-    await appendLeadsToDataset(dataset._id, {
-      keyword: targetKeyword,
-      area: targetArea,
-      maxResults: parseInt(maxResults, 10) || 10,
-      noWebsiteOnly,
-      recentlyRegistered,
-      maxRating,
-      strictSearch
-    });
-
-    onClose();
+    try {
+      await appendLeadsToDataset(dataset._id, {
+        keyword: targetKeyword,
+        area: targetArea,
+        maxResults: parseInt(maxResults, 10) || 10,
+        noWebsiteOnly,
+        recentlyRegistered,
+        maxRating,
+        strictSearch
+      });
+      if (refreshUser) refreshUser();
+      onClose();
+    } catch (err) {
+      // Handled in context
+    }
   };
 
   const getRatingHoverText = (rating) => {
@@ -206,7 +215,8 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
               <input
                 type="range"
                 min="1"
-                max="100"
+                max={!isSuperAdmin ? Math.min(100, Math.max(1, remainingToday)) : 100}
+                disabled={scraping || (!isSuperAdmin && remainingToday <= 0)}
                 value={maxResults}
                 onMouseEnter={() => setHoverText(`Extract up to ${maxResults} live business profiles into this dataset.`)}
                 onMouseLeave={() => setHoverText('')}
@@ -218,10 +228,11 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
                 className="flex-1 accent-blue-500 bg-zinc-800 cursor-pointer h-2 rounded-none"
               />
               <div className="flex items-center gap-1">
-                {[10, 25, 50, 100].map(c => (
+                {[10, 25, 50, 100].filter(c => isSuperAdmin || c <= remainingToday).map(c => (
                   <button
                     type="button"
                     key={c}
+                    disabled={scraping || (!isSuperAdmin && remainingToday <= 0)}
                     onMouseEnter={() => setHoverText(`Extract a batch of up to ${c} verified business profiles.`)}
                     onMouseLeave={() => setHoverText('')}
                     onClick={() => {

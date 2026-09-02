@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLead } from '../../context/LeadContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { ProductService } from '../../services/api';
 import RatingStars from '../common/RatingStars';
 import StatusBadge from '../common/StatusBadge';
 import ClipboardButton from '../common/ClipboardButton';
@@ -16,21 +19,26 @@ import {
   Clock, 
   MessageSquare, 
   History, 
-  Search,
-  ExternalLink,
-  Save,
-  Check,
-  CalendarCheck,
-  XCircle,
-  Layers,
-  PlusCircle,
-  BarChart3,
-  X,
-  ArrowRight,
-  Sparkles
+  Search, 
+  ExternalLink, 
+  Save, 
+  Check, 
+  CalendarCheck, 
+  XCircle, 
+  Layers, 
+  PlusCircle, 
+  BarChart3, 
+  X, 
+  ArrowRight, 
+  Sparkles,
+  Package,
+  Percent,
+  DollarSign
 } from 'lucide-react';
 
 const CallingWorkstation = () => {
+  const { isSuperAdmin } = useAuth();
+  const { addToast } = useToast();
   const { 
     callingQueue, 
     activeQueueIndex, 
@@ -59,6 +67,12 @@ const CallingWorkstation = () => {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [selectedSwitchDatasetId, setSelectedSwitchDatasetId] = useState('');
   
+  // Product Catalog & Deal Selection state
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [productValidationError, setProductValidationError] = useState(false);
+
   // Left queue pagination (10 entries per page)
   const [queuePage, setQueuePage] = useState(1);
   const QUEUE_PAGE_SIZE = 10;
@@ -122,14 +136,86 @@ const CallingWorkstation = () => {
   // Active lead
   const activeLead = callingQueue[activeQueueIndex] || null;
 
-  // Sync selected status when active lead changes
+  // Fetch active products from catalog on mount
+  useEffect(() => {
+    const fetchCatalog = async () => {
+      try {
+        setLoadingProducts(true);
+        const res = await ProductService.getProducts();
+        if (res.data?.success) {
+          setCatalogProducts(res.data.data || []);
+        }
+      } catch (err) {
+        console.error('Workstation product load error:', err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    fetchCatalog();
+  }, []);
+
+  // Sync selected status & attached products when active lead changes
   useEffect(() => {
     if (activeLead) {
       setSelectedStatus(activeLead.callStatus || 'Uncontacted');
       setFollowUpDate(activeLead.followUpDate ? new Date(activeLead.followUpDate).toISOString().slice(0, 16) : '');
       setCurrentNote('');
+      setProductValidationError(false);
+
+      if (activeLead.interestedProducts && activeLead.interestedProducts.length > 0) {
+        setSelectedProducts(activeLead.interestedProducts.map(p => ({
+          productId: p.productId || p._id,
+          name: p.name,
+          category: p.category,
+          basePrice: p.basePrice,
+          discountPercent: p.discountPercent || 0,
+          finalPrice: p.finalPrice,
+          currency: p.currency || 'PKR'
+        })));
+      } else {
+        setSelectedProducts([]);
+      }
     }
   }, [activeLead]);
+
+  // Toggle product selection in deal box
+  const handleToggleProduct = (product) => {
+    setProductValidationError(false);
+    const exists = selectedProducts.find(p => (p.productId || p._id) === product._id);
+    if (exists) {
+      setSelectedProducts(prev => prev.filter(p => (p.productId || p._id) !== product._id));
+    } else {
+      setSelectedProducts(prev => [
+        ...prev,
+        {
+          productId: product._id,
+          name: product.name,
+          category: product.category,
+          basePrice: product.basePrice,
+          discountPercent: 0,
+          finalPrice: product.basePrice,
+          currency: product.currency || 'PKR'
+        }
+      ]);
+    }
+  };
+
+  // Adjust discount for a selected product
+  const handleProductDiscountChange = (productId, discountVal, basePrice) => {
+    const cleanDiscount = Math.min(100, Math.max(0, parseFloat(discountVal) || 0));
+    const finalPrice = Math.round(basePrice * (1 - cleanDiscount / 100));
+
+    setSelectedProducts(prev => prev.map(p => {
+      if ((p.productId || p._id) === productId) {
+        return {
+          ...p,
+          discountPercent: cleanDiscount,
+          finalPrice
+        };
+      }
+      return p;
+    }));
+  };
 
   // Set default switch dataset if available
   useEffect(() => {
@@ -160,18 +246,37 @@ const CallingWorkstation = () => {
    */
   const handleSaveCurrent = async (advance = false) => {
     if (!activeLead) return;
+
+    // Compulsory check for Lead / Sale
+    if (selectedStatus === 'Lead / Sale' && (!selectedProducts || selectedProducts.length === 0)) {
+      setProductValidationError(true);
+      addToast({
+        title: 'Product Selection Compulsory',
+        message: 'Please select at least one product from the catalog before saving a "Lead / Sale".',
+        type: 'error',
+        duration: 4500
+      });
+      return;
+    }
+
     setSaving(true);
 
     try {
       const noteToSave = currentNote.trim();
+      const productsToAttach = (selectedStatus === 'Lead / Sale' || selectedStatus === 'Follow Up') 
+        ? selectedProducts 
+        : [];
+
       await updateCallStatus(
         activeLead._id, 
         selectedStatus, 
         noteToSave, 
-        selectedStatus === 'Follow Up' ? followUpDate : null
+        selectedStatus === 'Follow Up' ? followUpDate : null,
+        productsToAttach
       );
 
       setCurrentNote('');
+      setProductValidationError(false);
 
       if (advance) {
         if (activeQueueIndex < callingQueue.length - 1) {
@@ -285,6 +390,11 @@ const CallingWorkstation = () => {
   const totalDbLeads = pagination?.totalLeads || 0;
   const uncontactedCount = statusCounts?.Uncontacted || 0;
   const pipelineCount = (statusCounts?.['Shows Interest'] || 0) + (statusCounts?.['Follow Up'] || 0) + (statusCounts?.['Lead / Sale'] || 0);
+
+  // Deal value & discount calculations for selected products
+  const totalDealValue = selectedProducts.reduce((sum, p) => sum + (p.finalPrice || 0), 0);
+  const totalBaseValue = selectedProducts.reduce((sum, p) => sum + (p.basePrice || 0), 0);
+  const totalDiscountAmount = totalBaseValue - totalDealValue;
 
   // ─── EMPTY QUEUE SCREEN ──────────────────────────────────────────────────
   if (callingQueue.length === 0 && !loadingQueue) {
@@ -554,16 +664,18 @@ const CallingWorkstation = () => {
                 </div>
               </div>
 
-              {/* Direct Outreach Trigger */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSendSingleProposal}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
-                >
-                  <Send className="w-3.5 h-3.5" /> Send Proposal
-                </button>
-              </div>
+              {/* Direct Outreach Trigger (Super Admin Only) */}
+              {isSuperAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendSingleProposal}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Send Proposal
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -689,6 +801,185 @@ const CallingWorkstation = () => {
                   onChange={(e) => setFollowUpDate(e.target.value)}
                   className="w-full sm:w-auto px-3 py-1.5 bg-black border border-yellow-700/60 text-yellow-200 text-xs focus:outline-none"
                 />
+              </div>
+            )}
+
+            {/* ─── PRODUCT CATALOG & DEAL SELECTION (FOLLOW UP OR LEAD / SALE) ─── */}
+            {(selectedStatus === 'Follow Up' || selectedStatus === 'Lead / Sale') && (
+              <div className={`p-4 border space-y-4 animate-in fade-in duration-200 ${
+                productValidationError
+                  ? 'border-red-600 bg-red-950/20 ring-1 ring-red-500/50'
+                  : selectedStatus === 'Lead / Sale'
+                    ? 'border-emerald-600/70 bg-[#06110A]'
+                    : 'border-yellow-700/60 bg-[#0E0C06]'
+              }`}>
+                {/* Box Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Package className={`w-4 h-4 ${selectedStatus === 'Lead / Sale' ? 'text-emerald-400' : 'text-yellow-400'}`} />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      Interested Offerings &amp; Deal Configuration
+                    </span>
+                  </div>
+                  <div>
+                    {selectedStatus === 'Lead / Sale' ? (
+                      <span className="text-[10px] px-2 py-0.5 border border-emerald-500/80 bg-emerald-950 text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                        Compulsory — Select At Least 1 Offering
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 border border-yellow-600/70 bg-yellow-950 text-yellow-300 font-bold uppercase tracking-wider">
+                        Optional — Select Offerings Discussed
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Validation Error Banner */}
+                {productValidationError && (
+                  <div className="p-2.5 bg-red-900/40 border border-red-700 text-red-200 text-xs flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>Action Required: You must select at least 1 product from the catalog below before saving a "Lead / Sale".</span>
+                  </div>
+                )}
+
+                {/* Products Grid */}
+                {loadingProducts ? (
+                  <div className="py-6 flex items-center justify-center text-xs text-zinc-500">
+                    Loading offerings from catalog...
+                  </div>
+                ) : catalogProducts.length === 0 ? (
+                  <div className="py-4 text-xs text-zinc-500 text-center">
+                    No active offerings found in catalog. Super Admin can add offerings in the Product Catalog tab.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {catalogProducts.map(prod => {
+                      const isSelected = selectedProducts.some(p => (p.productId || p._id) === prod._id);
+                      const selectedItem = selectedProducts.find(p => (p.productId || p._id) === prod._id);
+                      const currentDiscount = selectedItem ? selectedItem.discountPercent : 0;
+                      const currentFinalPrice = selectedItem ? selectedItem.finalPrice : prod.basePrice;
+                      const maxDisc = prod.maxDiscountPercent || 0;
+
+                      return (
+                        <div
+                          key={prod._id}
+                          className={`p-3 border transition-all ${
+                            isSelected 
+                              ? selectedStatus === 'Lead / Sale'
+                                ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500/40'
+                                : 'border-yellow-500 bg-yellow-950/40 ring-1 ring-yellow-500/40'
+                              : 'border-[#222222] bg-black/60 hover:border-zinc-700'
+                          }`}
+                        >
+                          {/* Product Title & Selection Toggle */}
+                          <div 
+                            onClick={() => handleToggleProduct(prod)}
+                            className="flex items-start justify-between gap-2 cursor-pointer select-none"
+                          >
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="mt-0.5 w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                              />
+                              <div>
+                                <div className="text-xs font-bold text-white leading-snug">{prod.name}</div>
+                                <span className="text-[9px] px-1.5 py-0.2 border border-zinc-800 bg-[#121212] text-zinc-400 uppercase">
+                                  {prod.category}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-bold font-mono text-white">
+                                {prod.currency} {prod.basePrice.toLocaleString()}
+                              </div>
+                              {maxDisc > 0 && (
+                                <span className="text-[9px] text-purple-400 font-mono block">
+                                  Max {maxDisc}% Off
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Inline Discount Configuration */}
+                          {isSelected && (
+                            <div className="mt-3 pt-2.5 border-t border-white/10 space-y-2">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-zinc-400 flex items-center gap-1">
+                                  <Percent className="w-3 h-3 text-purple-400" />
+                                  Agreed Discount:
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-purple-300 font-bold font-mono">{currentDiscount}%</span>
+                                  <span className="text-[10px] text-zinc-500">
+                                    (-{prod.currency} {(prod.basePrice - currentFinalPrice).toLocaleString()})
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Slider capped at maxDiscountPercent */}
+                              {maxDisc > 0 ? (
+                                <div className="space-y-1">
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max={maxDisc}
+                                    step="1"
+                                    value={currentDiscount}
+                                    onChange={(e) => handleProductDiscountChange(prod._id, e.target.value, prod.basePrice)}
+                                    className="w-full accent-purple-500 bg-zinc-800 h-1 cursor-pointer"
+                                  />
+                                  <div className="flex items-center justify-between text-[9px] text-zinc-500 font-mono">
+                                    <span>0% Standard</span>
+                                    <span>Max Permitted: {maxDisc}%</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-zinc-500 italic">
+                                  Fixed standard price (No discount variation configured).
+                                </div>
+                              )}
+
+                              {/* Final Negotiated Closing Price */}
+                              <div className="flex items-center justify-between pt-1 text-xs">
+                                <span className="text-[10px] text-zinc-400 uppercase">Closing Price:</span>
+                                <span className="text-xs font-bold font-mono text-emerald-400">
+                                  {prod.currency} {currentFinalPrice.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Cumulative Deal Summary Footer */}
+                {selectedProducts.length > 0 && (
+                  <div className="p-3 bg-black border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-zinc-400">
+                        <strong className="text-white">{selectedProducts.length}</strong> {selectedProducts.length === 1 ? 'Offering' : 'Offerings'} Selected
+                      </span>
+                      {totalDiscountAmount > 0 && (
+                        <span className="text-[10px] text-purple-400 font-mono">
+                          Total Discount: -PKR {totalDiscountAmount.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:justify-end">
+                      <span className="text-[11px] text-zinc-400 uppercase tracking-wider">Total Deal Value:</span>
+                      <span className="text-sm font-bold font-mono text-emerald-400">
+                        PKR {totalDealValue.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

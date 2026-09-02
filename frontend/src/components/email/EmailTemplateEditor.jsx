@@ -26,12 +26,12 @@ const EmailTemplateEditor = () => {
 
   // Dummy lead for preview interpolation
   const sampleLead = {
-    businessName: 'Apex Roofing & Restoration',
-    phoneNumber: '+1 (305) 555-0142',
-    rating: '⭐ 3.2 (48 reviews)',
-    area: 'Miami, FL',
-    category: 'Roofing Specialist',
-    website: 'https://www.apexroofingmiami.com'
+    businessName: 'Apex Real Estate Consultants',
+    phoneNumber: '+92 42 35712345',
+    rating: '⭐ 4.2 (48 reviews)',
+    area: 'Gulberg, Lahore',
+    category: 'Real Estate & Property',
+    website: 'https://www.apexproperties.pk'
   };
 
   const renderPreview = (content) => {
@@ -337,7 +337,7 @@ const EmailTemplateEditor = () => {
               </div>
               <div className="p-4 bg-[#0A0A0A] border-b border-[#1A1A1A] font-mono text-xs">
                 <div className="text-zinc-500">Subject: <span className="text-white font-semibold">{renderPreview(subject)}</span></div>
-                <div className="text-zinc-600 text-[11px] mt-0.5">To: <span className="text-zinc-400">contact@apexroofingmiami.com</span></div>
+                <div className="text-zinc-600 text-[11px] mt-0.5">To: <span className="text-zinc-400">info@apexproperties.pk</span></div>
               </div>
               <div className="flex-1 w-full bg-[#07090E] overflow-hidden">
                 <iframe

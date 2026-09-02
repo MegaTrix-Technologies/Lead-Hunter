@@ -119,6 +119,21 @@ const KanbanPipeline = () => {
                       </div>
                     )}
 
+                    {/* Deal Value & Attached Offerings Badge */}
+                    {lead.dealValue > 0 && (
+                      <div className="p-1.5 bg-emerald-950/40 border border-emerald-800/50 text-[10px] font-mono space-y-0.5">
+                        <div className="flex items-center justify-between text-emerald-300 font-bold">
+                          <span>Deal Value:</span>
+                          <span>PKR {lead.dealValue.toLocaleString()}</span>
+                        </div>
+                        {lead.interestedProducts && lead.interestedProducts.length > 0 && (
+                          <div className="text-[9px] text-emerald-400/80 truncate">
+                            {lead.interestedProducts.map(p => p.name).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Quick Move & Action Footer */}
                     <div className="flex items-center justify-between pt-2 border-t border-[#1C1C1C] text-xs">
                       <button

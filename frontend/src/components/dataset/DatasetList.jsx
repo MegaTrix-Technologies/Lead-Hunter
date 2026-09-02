@@ -14,6 +14,7 @@ import {
 import { useLead } from '../../context/LeadContext';
 import DatasetCard from './DatasetCard';
 import AppendSearchModal from './AppendSearchModal';
+import { AuthService } from '../../services/api';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -21,6 +22,8 @@ const DatasetList = ({ onViewLeads }) => {
   const { datasets, loadingDatasets, fetchDatasets, setAppendModalDataset } = useLead();
   const [searchFilter, setSearchFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const currentUser = AuthService.getCurrentUser();
+  const isAgent = currentUser && currentUser.role === 'agent';
 
   // Reset to page 1 whenever the search filter changes
   useEffect(() => {
@@ -87,8 +90,17 @@ const DatasetList = ({ onViewLeads }) => {
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 bg-blue-500 rounded-none shrink-0" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Extracted Datasets &amp; Campaigns ({datasets.length} Total)
+              {isAgent ? 'My Extracted Datasets' : 'All Extracted Datasets'} ({datasets.length} Total)
             </h3>
+            {isAgent ? (
+              <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-950/60 text-blue-400 border border-blue-800/80">
+                Agent Scope
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono px-2 py-0.5 bg-purple-950/60 text-purple-400 border border-purple-800/80">
+                Super Admin (Company-wide)
+              </span>
+            )}
           </div>
           <button
             type="button"

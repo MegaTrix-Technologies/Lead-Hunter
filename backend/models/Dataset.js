@@ -52,7 +52,18 @@ const datasetSchema = new mongoose.Schema({
       resultsCount: Number,
       executedAt: { type: Date, default: Date.now }
     }
-  ]
+  ],
+  // User Attribution (Multi-User RBAC)
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  createdByName: {
+    type: String,
+    default: 'Super Admin'
+  }
 }, {
   timestamps: true
 });

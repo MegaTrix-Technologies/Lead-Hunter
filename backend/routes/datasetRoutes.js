@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const datasetController = require('../controllers/datasetController');
+const { authenticate } = require('../middleware/authMiddleware');
+
+router.use(authenticate);
 
 router.get('/', datasetController.getDatasets);
 router.get('/:id', datasetController.getDatasetById);

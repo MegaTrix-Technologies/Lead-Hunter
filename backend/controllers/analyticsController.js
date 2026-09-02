@@ -2,32 +2,47 @@ const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const Dataset = require('../models/Dataset');
 const ScrapeJob = require('../models/ScrapeJob');
+const User = require('../models/User');
 
 exports.getAnalytics = async (req, res) => {
   try {
-    const totalLeads = await Lead.countDocuments();
-    const totalDatasets = await Dataset.countDocuments();
-    const uncontactedCount = await Lead.countDocuments({ callStatus: 'Uncontacted' });
-    const unreachableCount = await Lead.countDocuments({ callStatus: 'Unreachable' });
-    const ivrCount = await Lead.countDocuments({ callStatus: 'IVR' });
-    const receptionistCount = await Lead.countDocuments({ callStatus: 'Receptionist' });
-    const dncCount = await Lead.countDocuments({ callStatus: 'Do Not Call' });
-    const showsInterestCount = await Lead.countDocuments({ callStatus: 'Shows Interest' });
-    const followUpCount = await Lead.countDocuments({ callStatus: 'Follow Up' });
-    const convertedCount = await Lead.countDocuments({ callStatus: 'Lead / Sale' });
+    const user = req.user;
+    const isAgent = user && user.role === 'agent';
+    const leadFilter = isAgent ? { extractedBy: user._id } : {};
+
+    const totalLeads = await Lead.countDocuments(leadFilter);
+    const uncontactedCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Uncontacted' });
+    const unreachableCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Unreachable' });
+    const ivrCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'IVR' });
+    const receptionistCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Receptionist' });
+    const dncCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Do Not Call' });
+    const showsInterestCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Shows Interest' });
+    const followUpCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Follow Up' });
+    const convertedCount = await Lead.countDocuments({ ...leadFilter, callStatus: 'Lead / Sale' });
 
     const totalContacted = totalLeads - uncontactedCount;
     const conversionRate = totalContacted > 0 ? ((convertedCount / totalContacted) * 100).toFixed(1) : 0;
     const interestRate = totalContacted > 0 ? (((showsInterestCount + followUpCount + convertedCount) / totalContacted) * 100).toFixed(1) : 0;
 
     // Email stats
-    const totalEmailed = await Lead.countDocuments({ emailSentCount: { $gt: 0 } });
-    const safetyCappedLeads = await Lead.countDocuments({ emailSentCount: { $gte: 3 } });
+    const totalEmailed = await Lead.countDocuments({ ...leadFilter, emailSentCount: { $gt: 0 } });
+    const safetyCappedLeads = await Lead.countDocuments({ ...leadFilter, emailSentCount: { $gte: 3 } });
 
     // Dataset Performance Comparison
-    const datasets = await Dataset.find().sort({ createdAt: -1 }).lean();
+    const datasetQuery = isAgent ? { createdBy: user._id } : {};
+    let datasets = await Dataset.find(datasetQuery).sort({ createdAt: -1 }).lean();
+    if (isAgent && datasets.length === 0) {
+      // Fallback to all datasets if agent hasn't created one
+      datasets = await Dataset.find().sort({ createdAt: -1 }).limit(10).lean();
+    }
+
+    const totalDatasets = isAgent ? datasets.length : await Dataset.countDocuments();
+
     const datasetPerformance = await Promise.all(datasets.map(async (ds) => {
-      const leads = await Lead.find({ datasetId: ds._id }).lean();
+      const leadMatch = { datasetId: ds._id };
+      if (isAgent) leadMatch.extractedBy = user._id;
+
+      const leads = await Lead.find(leadMatch).lean();
       const dsTotal = leads.length;
       const dsUncontacted = leads.filter(l => l.callStatus === 'Uncontacted').length;
       const dsUnreachable = leads.filter(l => l.callStatus === 'Unreachable').length;
@@ -59,30 +74,37 @@ exports.getAnalytics = async (req, res) => {
     }));
 
     // Category breakdown
-    const categoryStats = await Lead.aggregate([
+    const categoryPipeline = [];
+    if (isAgent) categoryPipeline.push({ $match: { extractedBy: user._id } });
+    categoryPipeline.push(
       { $group: { _id: '$category', total: { $sum: 1 }, converted: { $sum: { $cond: [{ $eq: ['$callStatus', 'Lead / Sale'] }, 1, 0] } } } },
       { $sort: { total: -1 } },
       { $limit: 8 }
-    ]);
+    );
+    const categoryStats = await Lead.aggregate(categoryPipeline);
 
     // Area breakdown
-    const areaStats = await Lead.aggregate([
+    const areaPipeline = [];
+    if (isAgent) areaPipeline.push({ $match: { extractedBy: user._id } });
+    areaPipeline.push(
       { $group: { _id: '$area', total: { $sum: 1 }, interested: { $sum: { $cond: [{ $in: ['$callStatus', ['Shows Interest', 'Follow Up', 'Lead / Sale']] }, 1, 0] } } } },
       { $sort: { total: -1 } },
       { $limit: 8 }
-    ]);
+    );
+    const areaStats = await Lead.aggregate(areaPipeline);
 
     // Rating breakdown
-    const ratingBuckets = await Lead.aggregate([
-      {
-        $bucket: {
-          groupBy: '$rating',
-          boundaries: [0, 2.0, 3.0, 4.0, 5.1],
-          default: 'Other',
-          output: { count: { $sum: 1 } }
-        }
+    const ratingPipeline = [];
+    if (isAgent) ratingPipeline.push({ $match: { extractedBy: user._id } });
+    ratingPipeline.push({
+      $bucket: {
+        groupBy: '$rating',
+        boundaries: [0, 2.0, 3.0, 4.0, 5.1],
+        default: 'Other',
+        output: { count: { $sum: 1 } }
       }
-    ]);
+    });
+    const ratingBuckets = await Lead.aggregate(ratingPipeline);
 
     res.json({
       success: true,
@@ -121,11 +143,21 @@ exports.getAnalytics = async (req, res) => {
 };
 
 /**
- * Live Limits & Credits Tracker for Brevo & Google Places API
- * 100% Serverless on-demand calculation with real usage counts and countdown timers
+ * Live Limits & Credits Tracker for Brevo & Google Places API + Team Usage Breakdown
  */
 exports.getApiLimitsAndCredits = async (req, res) => {
   try {
+    const user = req.user;
+    const isSuperAdmin = !user || user.role === 'superadmin';
+
+    // If agent accesses this endpoint, return 403 Forbidden
+    if (!isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access restricted: Super Administrator privileges required to view API limits and credits.'
+      });
+    }
+
     const now = new Date();
     
     // 1. Brevo Daily Quota Calculation (300 emails/day, resets at 00:00 UTC Midnight)
@@ -179,6 +211,37 @@ exports.getApiLimitsAndCredits = async (req, res) => {
     const estimatedRequestsLimit = Math.floor(googleMonthlyCreditLimit / estimatedCostPerCall); // ~6,250
     const remainingRequests = Math.max(0, estimatedRequestsLimit - totalPlacesApiRequestsThisMonth);
 
+    // 3. User-by-User Team GMB Usage Breakdown
+    const users = await User.find().sort({ role: 1, name: 1 }).lean();
+    const teamUsage = await Promise.all(
+      users.map(async (u) => {
+        const isUserSuperAdmin = u.role === 'superadmin';
+        const usedToday = await Lead.countDocuments({
+          extractedBy: u._id,
+          createdAt: { $gte: startOfTodayUTC }
+        });
+        const totalExtracted = await Lead.countDocuments({ extractedBy: u._id });
+        const limit = u.dailyGmbLimit || 150;
+        const remainingToday = isUserSuperAdmin ? 999999 : Math.max(0, limit - usedToday);
+        const usagePercentage = isUserSuperAdmin
+          ? 0
+          : Math.min(100, Math.round((usedToday / (limit || 1)) * 100));
+
+        return {
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          status: u.status,
+          dailyLimit: limit,
+          usedToday,
+          remainingToday,
+          totalExtracted,
+          usagePercentage
+        };
+      })
+    );
+
     res.json({
       success: true,
       data: {
@@ -210,6 +273,7 @@ exports.getApiLimitsAndCredits = async (req, res) => {
           apiKeyConfigured: Boolean(process.env.GOOGLE_PLACES_API_KEY),
           status: 'Active (Places API v1)'
         },
+        teamUsage,
         system: {
           mode: '100% Serverless (Vercel Ready)',
           database: 'MongoDB Atlas Cloud Cluster',

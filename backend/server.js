@@ -4,8 +4,12 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const authController = require('./controllers/authController');
+const productController = require('./controllers/productController');
 
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const productRoutes = require('./routes/productRoutes');
 const leadRoutes = require('./routes/leadRoutes');
 const datasetRoutes = require('./routes/datasetRoutes');
 const scraperRoutes = require('./routes/scraperRoutes');
@@ -15,8 +19,13 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Ensure DB connection is initiated for serverless invocations
-connectDB().catch(err => console.error('[MegaTrix DB] Connect catch:', err.message));
+// Ensure DB connection is initiated and seed default Super Admin & Product Catalog
+connectDB()
+  .then(async () => {
+    await authController.seedSuperAdmin();
+    await productController.seedDefaultProducts();
+  })
+  .catch(err => console.error('[MegaTrix DB] Connect catch:', err.message));
 
 // Middleware
 app.use(cors({
@@ -30,6 +39,8 @@ app.use(morgan('dev'));
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/datasets', datasetRoutes);
 app.use('/api/scraper', scraperRoutes);

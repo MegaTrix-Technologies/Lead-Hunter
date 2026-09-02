@@ -12,7 +12,8 @@ import {
   Settings, 
   Zap,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Package
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -25,9 +26,9 @@ const Navbar = () => {
     callingQueue 
   } = useLead();
 
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin } = useAuth();
 
-  const navItems = [
+  const allNavItems = [
     { id: 'scraper', label: 'GMB Extractor', icon: Compass, badge: null },
     { 
       id: 'workstation', 
@@ -36,7 +37,8 @@ const Navbar = () => {
       badge: callingQueue.length > 0 ? callingQueue.length : null,
       badgeColor: 'bg-blue-600'
     },
-    { id: 'email', label: 'Email Proposals', icon: Mail, badge: null },
+    { id: 'products', label: 'Product Catalog', icon: Package, badge: null },
+    { id: 'email', label: 'Email Proposals', icon: Mail, badge: null, superAdminOnly: true },
     { 
       id: 'crm', 
       label: 'Leads Database', 
@@ -48,6 +50,8 @@ const Navbar = () => {
     { id: 'analytics', label: 'Analytics', icon: BarChart3, badge: null },
     { id: 'settings', label: 'Settings', icon: Settings, badge: null }
   ];
+
+  const navItems = allNavItems.filter(item => !item.superAdminOnly || isSuperAdmin);
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#000000] border-b border-[#1E1E1E]">
@@ -82,33 +86,46 @@ const Navbar = () => {
           {/* Right Area: Limits & Credits Button, User Avatar Profile, Sync & Sign Out Buttons */}
           <div className="flex items-center gap-2.5">
             
-            {/* Quick Limits & Credits Action Button */}
-            <button
-              onClick={() => setActiveView('settings')}
-              title="View API Free Tier Limits & Credit Refresh Timers"
-              className={`px-3 py-1.5 border text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer ${
-                activeView === 'settings' 
-                  ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-[0_0_10px_rgba(59,130,246,0.3)]' 
-                  : 'border-[#222222] bg-[#0A0A0A] text-zinc-300 hover:text-white hover:border-zinc-500'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Limits &amp; Credits</span>
-            </button>
+            {/* Quick Limits & Credits Action Button (Super Admin Only) */}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setActiveView('settings')}
+                title="View API Free Tier Limits & Credit Refresh Timers"
+                className={`px-3 py-1.5 border text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeView === 'settings' 
+                    ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-bold shadow-[0_0_10px_rgba(59,130,246,0.3)]' 
+                    : 'border-[#222222] bg-[#0A0A0A] text-zinc-300 hover:text-white hover:border-zinc-500'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden sm:inline">Limits &amp; Credits</span>
+              </button>
+            )}
 
             {/* Multi-User Tracking Avatar Badge */}
             <div 
               onClick={() => setActiveView('settings')}
               className="flex items-center gap-2.5 px-3 py-1.5 bg-[#0A0A0A] border border-[#222222] hover:border-zinc-700 transition-colors cursor-pointer select-none"
             >
-              <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-blue-600/20 border border-blue-500/50 text-blue-400 text-xs font-bold font-mono">
-                M
+              <div className={`relative flex items-center justify-center w-6 h-6 rounded-full border text-xs font-bold font-mono ${
+                isSuperAdmin 
+                  ? 'bg-purple-950/50 border-purple-500/50 text-purple-300' 
+                  : 'bg-blue-600/20 border-blue-500/50 text-blue-400'
+              }`}>
+                {(user?.name || 'S').charAt(0).toUpperCase()}
                 <span className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-emerald-500 rounded-full ring-1 ring-black" />
               </div>
               <div className="flex flex-col leading-none hidden md:flex">
-                <span className="text-xs font-mono font-semibold text-white">
-                  {user?.name || 'Sales Desk'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono font-semibold text-white">
+                    {user?.name || 'Sales Desk'}
+                  </span>
+                  <span className={`text-[9px] px-1 py-0.2 uppercase font-bold tracking-wider rounded ${
+                    isSuperAdmin ? 'bg-purple-900/50 text-purple-300 border border-purple-800' : 'bg-blue-900/40 text-blue-300 border border-blue-800'
+                  }`}>
+                    {isSuperAdmin ? 'SUPER ADMIN' : 'AGENT'}
+                  </span>
+                </div>
                 <span className="text-[9px] font-mono text-zinc-500 mt-0.5">
                   {user?.email || 'sales@megatrixai.com'}
                 </span>

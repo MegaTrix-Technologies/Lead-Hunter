@@ -82,6 +82,46 @@ const LeadSchema = new mongoose.Schema({
     default: null
   },
   
+  // Product Catalog Deal Tracking
+  interestedProducts: [{
+    productId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Product' 
+    },
+    name: { 
+      type: String, 
+      required: true 
+    },
+    category: { 
+      type: String 
+    },
+    basePrice: { 
+      type: Number, 
+      required: true 
+    },
+    discountPercent: { 
+      type: Number, 
+      default: 0 
+    },
+    finalPrice: { 
+      type: Number, 
+      required: true 
+    },
+    currency: { 
+      type: String, 
+      default: 'PKR' 
+    },
+    addedAt: { 
+      type: Date, 
+      default: Date.now 
+    }
+  }],
+  dealValue: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  
   // Email Proposal State
   emailSentCount: { 
     type: Number, 
@@ -122,6 +162,18 @@ const LeadSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ScrapeJob',
     default: null
+  },
+
+  // User Attribution (Multi-User RBAC)
+  extractedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  extractedByName: {
+    type: String,
+    default: 'Super Admin'
   }
 }, { 
   timestamps: true 
@@ -132,5 +184,6 @@ LeadSchema.index({ callStatus: 1, emailSentCount: 1 });
 LeadSchema.index({ area: 1, category: 1 });
 LeadSchema.index({ businessName: 1, area: 1 });
 LeadSchema.index({ datasetId: 1, callStatus: 1 });
+LeadSchema.index({ extractedBy: 1, callStatus: 1 });
 
 module.exports = mongoose.model('Lead', LeadSchema);

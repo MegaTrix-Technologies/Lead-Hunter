@@ -1,17 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Globe, Calendar, Star, ShieldCheck, Zap, Loader2, MapPin, Sliders, FileText, ChevronDown, ChevronUp, Clock, CheckCircle2 } from 'lucide-react';
+import { Search, Globe, Calendar, Star, ShieldCheck, Zap, Loader2, MapPin, Sliders, FileText, ChevronDown, ChevronUp, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useLead } from '../../context/LeadContext';
+import { useAuth } from '../../context/AuthContext';
 import { ScraperService } from '../../services/api';
 
 const ScraperControls = () => {
   const { executeScrape, scraping } = useLead();
+  const { isSuperAdmin, quota, refreshUser } = useAuth();
 
-  const [keyword, setKeyword] = useState('Roofing');
-  const [area, setArea] = useState('Miami, FL');
+  const remainingToday = isSuperAdmin ? 999999 : (quota?.remainingToday !== undefined ? quota.remainingToday : 150);
+
+  const [keyword, setKeyword] = useState('Real Estate');
+  const [area, setArea] = useState('Gulberg, Lahore');
   const [maxResults, setMaxResults] = useState(10);
   const [datasetName, setDatasetName] = useState('');
   const [datasetDescription, setDatasetDescription] = useState('');
   const [showAdvancedMeta, setShowAdvancedMeta] = useState(false);
+
+  // Sync remaining quota to maxResults
+  useEffect(() => {
+    if (!isSuperAdmin && remainingToday !== undefined) {
+      if (remainingToday <= 0) {
+        setMaxResults(0);
+      } else if (maxResults > remainingToday) {
+        setMaxResults(remainingToday);
+      }
+    }
+  }, [remainingToday, isSuperAdmin]);
 
   const [noWebsiteOnly, setNoWebsiteOnly] = useState(false);
   const [recentlyRegistered, setRecentlyRegistered] = useState(false);
@@ -34,8 +49,29 @@ const ScraperControls = () => {
   const dropdownRef = useRef(null);
   const debounceTimerRef = useRef(null);
 
-  const popularNiches = ['Roofing', 'Dentists', 'Remodeling', 'Plumbing', 'Solar', 'HVAC', 'Legal', 'Pool Builder'];
-  const popularAreas = ['Miami, FL', 'Austin, TX', 'London, UK', 'Dubai, UAE', 'Chicago, IL', 'Toronto, Canada', 'Sydney, Australia'];
+  // Curated high-demand niches in Lahore, Pakistan that lack websites
+  const popularNiches = [
+    'Real Estate',
+    'Marquee & Banquets',
+    'Rent a Car',
+    'Catering Services',
+    'Dental Clinics',
+    'Interior Designers',
+    'Auto Detailing',
+    'Solar Energy'
+  ];
+
+  // Prime commercial hubs and business districts of Lahore
+  const popularAreas = [
+    'Gulberg, Lahore',
+    'DHA Phase 5, Lahore',
+    'DHA Phase 3, Lahore',
+    'Johar Town, Lahore',
+    'Bahria Town, Lahore',
+    'Model Town, Lahore',
+    'Faisal Town, Lahore',
+    'Cavalry Ground, Lahore'
+  ];
   const countPresets = [10, 25, 50, 100];
 
   // Dynamic progress animation while scraping
@@ -156,20 +192,26 @@ const ScraperControls = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setShowDropdown(false);
-    executeScrape({
-      keyword,
-      area,
-      maxResults: parseInt(maxResults, 10) || 10,
-      datasetName: datasetName.trim() || undefined,
-      datasetDescription: datasetDescription.trim() || undefined,
-      noWebsiteOnly,
-      recentlyRegistered,
-      maxRating,
-      strictSearch
-    });
+    if (!isSuperAdmin && remainingToday <= 0) return;
+    try {
+      await executeScrape({
+        keyword,
+        area,
+        maxResults: parseInt(maxResults, 10) || 10,
+        datasetName: datasetName.trim() || undefined,
+        datasetDescription: datasetDescription.trim() || undefined,
+        noWebsiteOnly,
+        recentlyRegistered,
+        maxRating,
+        strictSearch
+      });
+      if (refreshUser) refreshUser();
+    } catch (err) {
+      // Handled in context
+    }
   };
 
   return (
@@ -191,22 +233,43 @@ const ScraperControls = () => {
           </p>
         </div>
 
-        {/* Info Tags */}
+        {/* Info Tags & Quota Badge */}
         <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
-          <span className="px-2 py-0.5 border border-blue-600/70 bg-blue-950/30 text-blue-300 font-semibold flex items-center gap-1.5">
-            <Zap className="w-3 h-3 text-blue-400" />
-            Max 100 Profiles / Search
-          </span>
+          {!isSuperAdmin ? (
+            <span className={`px-2.5 py-1 border font-bold flex items-center gap-1.5 ${
+              remainingToday > 0 
+                ? 'border-emerald-600/70 bg-emerald-950/40 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' 
+                : 'border-rose-600/80 bg-rose-950/50 text-rose-300'
+            }`}>
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              Remaining Today: {remainingToday} / {quota?.dailyLimit || 150} Profiles
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 border border-purple-600/70 bg-purple-950/30 text-purple-300 font-semibold flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-purple-400" />
+              Unlimited Extraction (Super Admin)
+            </span>
+          )}
 
           <span className={`px-2 py-0.5 border ${
             strictSearch 
               ? 'border-blue-500/80 bg-blue-950/40 text-blue-400 font-semibold' 
               : 'border-zinc-700 bg-[#121212] text-zinc-300'
           }`}>
-            {strictSearch ? 'STRICT (100% MATCH)' : 'RELAXED (ADAPTIVE)'}
+            {strictSearch ? 'Strict Niche Mode' : 'Broad Matches'}
           </span>
         </div>
       </div>
+
+      {/* Agent Quota Notice Banner if depleted */}
+      {!isSuperAdmin && remainingToday <= 0 && (
+        <div className="mt-4 p-3 bg-rose-950/40 border border-rose-800 text-rose-300 text-xs font-mono flex items-center gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          <span>
+            <strong>Daily Quota Depleted:</strong> You have reached your limit of {quota?.dailyLimit || 150} profiles for today. Please contact your Super Administrator to increase your daily limit.
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-5 space-y-5">
         
@@ -225,7 +288,7 @@ const ScraperControls = () => {
                 disabled={scraping}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="e.g. Roofing, Dentists, Plumbing..."
+                placeholder="e.g. Real Estate, Marquee & Banquets, Rent a Car..."
                 className="w-full px-3.5 py-2.5 bg-[#000000] border border-[#2B2B2B] text-white text-xs font-mono focus:border-white focus:outline-none disabled:opacity-50"
               />
               <Search className="w-3.5 h-3.5 text-zinc-500 absolute right-3 top-3" />
@@ -252,10 +315,10 @@ const ScraperControls = () => {
             </div>
           </div>
 
-          {/* Area / Worldwide Location (With Autocomplete Dropdown) */}
+          {/* Area / Commercial Location (With Autocomplete Dropdown) */}
           <div className="relative" ref={dropdownRef}>
             <label className="block text-xs font-mono text-zinc-400 mb-1.5 uppercase">
-              Area / Worldwide Location <span className="text-red-500">*</span>
+              Commercial Area / Location <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
@@ -266,7 +329,7 @@ const ScraperControls = () => {
                 onChange={(e) => handleAreaChange(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type any city, state, or country worldwide..."
+                placeholder="e.g. Gulberg, Lahore, DHA Phase 5, Johar Town..."
                 className="w-full px-3.5 py-2.5 bg-[#000000] border border-[#2B2B2B] text-white text-xs font-mono focus:border-white focus:outline-none disabled:opacity-50"
               />
               {loadingSuggestions ? (
@@ -345,14 +408,14 @@ const ScraperControls = () => {
             <input
               type="range"
               min="1"
-              max="100"
-              disabled={scraping}
+              max={!isSuperAdmin ? Math.min(100, Math.max(1, remainingToday)) : 100}
+              disabled={scraping || (!isSuperAdmin && remainingToday <= 0)}
               value={maxResults}
               onChange={(e) => setMaxResults(parseInt(e.target.value, 10))}
               className="flex-1 accent-blue-500 bg-zinc-800 cursor-pointer h-2 disabled:opacity-40"
             />
             <div className="flex items-center gap-1">
-              {countPresets.map(c => (
+              {countPresets.filter(c => isSuperAdmin || c <= remainingToday).map(c => (
                 <button
                   type="button"
                   key={c}
@@ -590,13 +653,18 @@ const ScraperControls = () => {
 
           <button
             type="submit"
-            disabled={scraping}
+            disabled={scraping || (!isSuperAdmin && remainingToday <= 0)}
             className="w-full sm:w-auto px-8 py-3 bg-white text-black font-mono font-bold text-xs uppercase tracking-wider hover:bg-zinc-200 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer border border-white shadow-lg"
           >
             {scraping ? (
               <>
                 <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                 <span>Extracting {maxResults} Leads ({progress}%)...</span>
+              </>
+            ) : !isSuperAdmin && remainingToday <= 0 ? (
+              <>
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                <span>Daily Limit Reached (0 Remaining)</span>
               </>
             ) : (
               <>

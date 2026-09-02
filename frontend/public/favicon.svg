@@ -1,19 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  MEGATRIX — Square App Icon SVG
-  ═══════════════════════════════
-  Color   : #FFFFFF with #3B82F6 Accent Dot
-  ViewBox : 0 0 160 160 (1:1 Square)
--->
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  viewBox="0 0 160 160"
-  role="img"
-  aria-label="MEGATRIX Icon"
->
-  <title>MEGATRIX Icon</title>
-  <desc>MEGATRIX pixel-art MT monogram icon.</desc>
-
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <rect width="160" height="160" rx="32" fill="#000000"/>
+  <rect width="158" height="158" x="1" y="1" rx="31" fill="none" stroke="#222222" stroke-width="2"/>
   <g transform="translate(10, 40)" fill="#FFFFFF">
     <!-- Row 0: ##....#######. -->
     <rect x="1"   y="1"  width="8" height="8"/>

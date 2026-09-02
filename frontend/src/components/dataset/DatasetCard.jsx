@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, PhoneCall, PlusCircle, Mail, Download, Trash2, Edit2, Check, X, MapPin, Calendar, FileText, FileSpreadsheet, Loader2, ChevronDown } from 'lucide-react';
+import { Layers, PhoneCall, PlusCircle, Mail, Download, Trash2, Edit2, Check, X, MapPin, Calendar, FileText, FileSpreadsheet, Loader2, ChevronDown, User } from 'lucide-react';
 import { useLead } from '../../context/LeadContext';
+import { useAuth } from '../../context/AuthContext';
 import { DatasetService, LeadService } from '../../services/api';
 
 const DatasetCard = ({ dataset, onOpenAppendModal }) => {
+  const { isSuperAdmin } = useAuth();
   const { loadDatasetQueue, updateDataset, deleteDataset, setIsCampaignModalOpen, setSelectedLeadIds, setCampaignDatasetLeads } = useLead();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -210,6 +212,10 @@ const DatasetCard = ({ dataset, onOpenAppendModal }) => {
             <MapPin className="w-3 h-3 text-zinc-500" />
             {dataset.area}
           </span>
+          <span className="px-2 py-0.5 bg-[#141418] border border-[#2B2B36] text-zinc-300 flex items-center gap-1" title="Created By">
+            <User className="w-3 h-3 text-zinc-500" />
+            <span className="text-[10px]">{dataset.createdByName || 'Super Admin'}</span>
+          </span>
           <span className="text-[10px] text-zinc-500 ml-auto flex items-center gap-1">
             <Calendar className="w-2.5 h-2.5" />
             {new Date(dataset.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -251,8 +257,8 @@ const DatasetCard = ({ dataset, onOpenAppendModal }) => {
         </div>
       </div>
 
-      {/* 2-Row x 2-Col Equal-Sized Action Buttons Grid */}
-      <div className="pt-3 border-t border-[#1C1C1C] grid grid-cols-2 gap-2.5">
+      {/* Action Buttons Grid */}
+      <div className={`pt-3 border-t border-[#1C1C1C] grid ${isSuperAdmin ? 'grid-cols-2' : 'grid-cols-3'} gap-2.5`}>
         
         {/* Row 1, Col 1: Launch CRM */}
         <button
@@ -260,55 +266,57 @@ const DatasetCard = ({ dataset, onOpenAppendModal }) => {
           onClick={() => loadDatasetQueue(dataset._id)}
           disabled={totalLeads === 0}
           title="Open Cold Calling Workstation with this dataset"
-          className="w-full py-2.5 bg-white hover:bg-zinc-200 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 transition-all shadow-md text-center"
+          className="w-full py-2.5 bg-white hover:bg-zinc-200 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 transition-all shadow-md text-center"
         >
-          <PhoneCall className="w-4 h-4 shrink-0" />
+          <PhoneCall className="w-3.5 h-3.5 shrink-0" />
           <span>Launch CRM</span>
         </button>
 
-        {/* Row 1, Col 2: Bulk Email Engine */}
-        <button
-          type="button"
-          onClick={handleBulkEmail}
-          disabled={totalLeads === 0 || loadingEmails}
-          title="Select all dataset emails and open Proposal Campaign engine"
-          className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-purple-300 hover:text-white border border-[#2B2B2B] hover:border-purple-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-30 transition-all text-center"
-        >
-          {loadingEmails ? (
-            <Loader2 className="w-4 h-4 animate-spin text-purple-400 shrink-0" />
-          ) : (
-            <Mail className="w-4 h-4 text-purple-400 shrink-0" />
-          )}
-          <span>Bulk Email</span>
-        </button>
+        {/* Row 1, Col 2: Bulk Email Engine (Super Admin Only) */}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={handleBulkEmail}
+            disabled={totalLeads === 0 || loadingEmails}
+            title="Select all dataset emails and open Proposal Campaign engine"
+            className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-purple-300 hover:text-white border border-[#2B2B2B] hover:border-purple-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-30 transition-all text-center"
+          >
+            {loadingEmails ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400 shrink-0" />
+            ) : (
+              <Mail className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            )}
+            <span>Bulk Email</span>
+          </button>
+        )}
 
-        {/* Row 2, Col 1: Add Entries */}
+        {/* Add Entries */}
         <button
           type="button"
           onClick={() => onOpenAppendModal && onOpenAppendModal(dataset)}
           title="Search more profiles to append to this dataset"
-          className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-200 hover:text-white border border-[#2B2B2B] hover:border-blue-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all text-center"
+          className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-200 hover:text-white border border-[#2B2B2B] hover:border-blue-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all text-center"
         >
-          <PlusCircle className="w-4 h-4 text-blue-400 shrink-0" />
+          <PlusCircle className="w-3.5 h-3.5 text-blue-400 shrink-0" />
           <span>Add Entries</span>
         </button>
 
-        {/* Row 2, Col 2: Export Dropdown */}
+        {/* Export Dropdown */}
         <div className="relative w-full" ref={exportRef}>
           <button
             type="button"
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={totalLeads === 0 || exportingCsv || exportingPdf}
             title="Export Dataset as CSV or High-Graphic PDF"
-            className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-200 hover:text-white border border-[#2B2B2B] hover:border-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-30 text-center"
+            className="w-full py-2.5 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-200 hover:text-white border border-[#2B2B2B] hover:border-zinc-500 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-30 text-center"
           >
             {exportingCsv || exportingPdf ? (
-              <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
             ) : (
-              <Download className="w-4 h-4 shrink-0" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
             )}
             <span>Export</span>
-            <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />
           </button>
 
           {showExportMenu && (

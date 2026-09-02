@@ -58,6 +58,12 @@ exports.getLeads = async (req, res) => {
       ];
     }
 
+    // Role-based scoping: Agents only see their extracted leads
+    const user = req.user;
+    if (user && user.role === 'agent') {
+      query.extractedBy = user._id;
+    }
+
     // Sort option
     let sort = { createdAt: -1 };
     if (req.query.sortBy) {
@@ -89,8 +95,10 @@ exports.getLeads = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // Summary counts for UI badges
+    // Summary counts for UI badges (scoped to user if agent)
+    const statusMatch = user && user.role === 'agent' ? { extractedBy: user._id } : {};
     const statusCounts = await Lead.aggregate([
+      { $match: statusMatch },
       { $group: { _id: '$callStatus', count: { $sum: 1 } } }
     ]);
 
@@ -144,7 +152,13 @@ exports.getCallingQueue = async (req, res) => {
     if (area) query.area = new RegExp(area, 'i');
     if (category) query.category = new RegExp(category, 'i');
 
-    // Retrieve active queue up to 100 leads for quick workstation navigation
+    // Role-based scoping: Agents only queue their extracted leads
+    const user = req.user;
+    if (user && user.role === 'agent') {
+      query.extractedBy = user._id;
+    }
+
+    // Retrieve active queue up to 150 leads for quick workstation navigation
     const leads = await Lead.find(query)
       .sort({ updatedAt: -1, createdAt: -1 })
       .limit(150)
@@ -182,11 +196,21 @@ exports.getLeadById = async (req, res) => {
 exports.updateCallStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { callStatus, note, followUpDate } = req.body;
+    const { callStatus, note, followUpDate, interestedProducts } = req.body;
 
     const validStatuses = ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
     if (callStatus && !validStatuses.includes(callStatus)) {
       return res.status(400).json({ success: false, message: 'Invalid call status provided.' });
+    }
+
+    // Compulsory check: Lead / Sale requires at least 1 interested product
+    if (callStatus === 'Lead / Sale') {
+      if (!Array.isArray(interestedProducts) || interestedProducts.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selection Compulsory: You must select at least one product from the catalog to mark a Lead / Sale.'
+        });
+      }
     }
 
     const updateDoc = {
@@ -201,16 +225,34 @@ exports.updateCallStatus = async (req, res) => {
       updateDoc.followUpDate = new Date(followUpDate);
     }
 
+    if (Array.isArray(interestedProducts)) {
+      updateDoc.interestedProducts = interestedProducts.map(p => ({
+        productId: p.productId || null,
+        name: p.name,
+        category: p.category || '',
+        basePrice: Number(p.basePrice) || 0,
+        discountPercent: Math.min(100, Math.max(0, Number(p.discountPercent) || 0)),
+        finalPrice: Number(p.finalPrice) || Number(p.basePrice) || 0,
+        currency: p.currency || 'PKR',
+        addedAt: p.addedAt || new Date()
+      }));
+
+      // Calculate total deal value from all attached products
+      updateDoc.dealValue = updateDoc.interestedProducts.reduce((sum, p) => sum + p.finalPrice, 0);
+    }
+
     const lead = await Lead.findById(id);
     if (!lead) {
       return res.status(404).json({ success: false, message: 'Lead not found.' });
     }
 
+    const authorName = req.user ? req.user.name : 'MegaTrix Outbound Agent';
+
     if (note && note.trim()) {
       lead.callNotes.push({
         note: note.trim(),
         timestamp: new Date(),
-        author: 'MegaTrix Outbound Agent'
+        author: authorName
       });
     }
 
@@ -245,10 +287,12 @@ exports.addCallNote = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Lead not found.' });
     }
 
+    const authorName = req.user ? req.user.name : (author || 'MegaTrix Agent');
+
     lead.callNotes.push({
       note: note.trim(),
       timestamp: new Date(),
-      author: author || 'MegaTrix Agent'
+      author: authorName
     });
 
     await lead.save();
@@ -270,6 +314,7 @@ exports.createLead = async (req, res) => {
     }
 
     const placeId = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const user = req.user;
     const newLead = await Lead.create({
       placeId,
       businessName,
@@ -281,7 +326,9 @@ exports.createLead = async (req, res) => {
       category,
       rating: parseFloat(rating) || 0,
       reviewCount: parseInt(reviewCount, 10) || 0,
-      callStatus: 'Uncontacted'
+      callStatus: 'Uncontacted',
+      extractedBy: user ? user._id : null,
+      extractedByName: user ? user.name : 'Super Admin'
     });
 
     res.status(201).json({ success: true, data: newLead });
@@ -334,23 +381,35 @@ exports.exportLeads = async (req, res) => {
     if (area) query.area = new RegExp(area, 'i');
     if (category) query.category = new RegExp(category, 'i');
 
+    const user = req.user;
+    if (user && user.role === 'agent') {
+      query.extractedBy = user._id;
+    }
+
     const leads = await Lead.find(query).lean();
 
     if (format === 'csv') {
+      const isSuperAdmin = !user || user.role === 'superadmin';
       const headers = ['Business Name', 'Category', 'Area', 'Rating', 'Review Count', 'Phone', 'Email', 'Website', 'Address', 'Call Status', 'Email Sent Count'];
-      const rows = leads.map(l => [
-        `"${(l.businessName || '').replace(/"/g, '""')}"`,
-        `"${(l.category || '').replace(/"/g, '""')}"`,
-        `"${(l.area || '').replace(/"/g, '""')}"`,
-        l.rating || 0,
-        l.reviewCount || 0,
-        `"${l.phoneNumber || ''}"`,
-        `"${l.email || ''}"`,
-        `"${l.website || ''}"`,
-        `"${(l.address || '').replace(/"/g, '""')}"`,
-        `"${l.callStatus || ''}"`,
-        l.emailSentCount || 0
-      ]);
+      if (isSuperAdmin) headers.push('Created By');
+
+      const rows = leads.map(l => {
+        const row = [
+          `"${(l.businessName || '').replace(/"/g, '""')}"`,
+          `"${(l.category || '').replace(/"/g, '""')}"`,
+          `"${(l.area || '').replace(/"/g, '""')}"`,
+          l.rating || 0,
+          l.reviewCount || 0,
+          `"${l.phoneNumber || ''}"`,
+          `"${l.email || ''}"`,
+          `"${l.website || ''}"`,
+          `"${(l.address || '').replace(/"/g, '""')}"`,
+          `"${l.callStatus || ''}"`,
+          l.emailSentCount || 0
+        ];
+        if (isSuperAdmin) row.push(`"${l.extractedByName || 'Super Admin'}"`);
+        return row;
+      });
 
       const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       res.setHeader('Content-Type', 'text/csv');

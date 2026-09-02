@@ -95,7 +95,8 @@ class GmbScraperService {
     strictSearch = false,
     datasetId = null,
     datasetName = null,
-    datasetDescription = ''
+    datasetDescription = '',
+    user = null
   }) {
     if (!keyword || !area) {
       throw new Error('Keyword/Niche and Area/Location are required parameters.');
@@ -130,7 +131,9 @@ class GmbScraperService {
         unreachableCount: 0,
         pipelineCount: 0,
         closedCount: 0,
-        searchHistory: []
+        searchHistory: [],
+        createdBy: user ? user._id : null,
+        createdByName: user ? user.name : 'Super Admin'
       });
     }
 
@@ -182,7 +185,9 @@ class GmbScraperService {
         emailSentCount: 0,
         emailHistory: [],
         datasetId: targetDataset._id,
-        datasetIds: [targetDataset._id]
+        datasetIds: [targetDataset._id],
+        extractedBy: user ? user._id : null,
+        extractedByName: user ? user.name : 'Super Admin'
       };
     });
 
@@ -303,7 +308,9 @@ class GmbScraperService {
       totalExtracted,
       totalQualified: savedLeads.length,
       totalExcluded,
-      status: 'completed'
+      status: 'completed',
+      userId: user ? user._id : null,
+      userName: user ? user.name : 'Super Admin'
     });
 
     return {

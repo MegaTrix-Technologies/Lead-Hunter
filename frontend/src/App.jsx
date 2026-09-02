@@ -12,12 +12,13 @@ import LeadsDatabase from './components/crm/LeadsDatabase';
 import KanbanPipeline from './components/crm/KanbanPipeline';
 import AnalyticsDashboard from './components/analytics/AnalyticsDashboard';
 import SettingsView from './components/settings/SettingsView';
+import ProductCatalogView from './components/products/ProductCatalogView';
 import EmailCampaignModal from './components/email/EmailCampaignModal';
 import DeliveryReportModal from './components/email/DeliveryReportModal';
 import AppendSearchModal from './components/dataset/AppendSearchModal';
 
 function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isSuperAdmin } = useAuth();
   const { activeView, setActiveView, setActiveDatasetId, fetchLeads, appendModalDataset, setAppendModalDataset } = useLead();
   const location = useLocation();
   const navigate = useNavigate();
@@ -29,11 +30,18 @@ function App() {
         navigate('/login', { replace: true });
       }
     } else {
+      // If agent attempts to navigate to email proposals directly, bounce to Gmb-Extractor
+      if (!isSuperAdmin && (location.pathname.toLowerCase() === '/email-proposals' || activeView === 'email')) {
+        setActiveView('scraper');
+        navigate('/Gmb-Extractor', { replace: true });
+        return;
+      }
+
       if (location.pathname.toLowerCase() === '/login' || location.pathname === '/') {
         navigate('/Gmb-Extractor', { replace: true });
       }
     }
-  }, [isAuthenticated, location.pathname, navigate]);
+  }, [isAuthenticated, isSuperAdmin, location.pathname, activeView, navigate, setActiveView]);
 
   const handleViewLeads = (dataset) => {
     setActiveDatasetId(dataset._id);
@@ -78,6 +86,10 @@ function App() {
           </div>
         )}
 
+        {activeView === 'products' && (
+          <ProductCatalogView />
+        )}
+
         {activeView === 'email' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-[#1E1E1E]">
@@ -113,8 +125,12 @@ function App() {
       </main>
 
       {/* Global Modals */}
-      <EmailCampaignModal />
-      <DeliveryReportModal />
+      {isSuperAdmin && (
+        <>
+          <EmailCampaignModal />
+          <DeliveryReportModal />
+        </>
+      )}
       <AppendSearchModal
         dataset={appendModalDataset}
         isOpen={Boolean(appendModalDataset)}

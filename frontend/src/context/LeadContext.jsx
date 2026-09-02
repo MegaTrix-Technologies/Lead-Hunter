@@ -330,12 +330,13 @@ export const LeadProvider = ({ children }) => {
   /**
    * Update Call Status & Sync
    */
-  const updateCallStatus = async (leadId, callStatus, note = '', followUpDate = null) => {
+  const updateCallStatus = async (leadId, callStatus, note = '', followUpDate = null, interestedProducts = []) => {
     try {
       const res = await LeadService.updateCallStatus(leadId, {
         callStatus,
         note,
-        followUpDate
+        followUpDate,
+        interestedProducts
       });
 
       if (res.data.success) {

@@ -33,6 +33,16 @@ const ScrapeJobSchema = new mongoose.Schema({
     type: String,
     enum: ['pending', 'completed', 'failed'],
     default: 'completed'
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  userName: {
+    type: String,
+    default: 'Super Admin'
   }
 }, { 
   timestamps: true 

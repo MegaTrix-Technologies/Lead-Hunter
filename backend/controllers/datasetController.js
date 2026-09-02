@@ -3,15 +3,34 @@ const Lead = require('../models/Lead');
 const gmbScraperService = require('../services/gmbScraperService');
 const pdfReportService = require('../services/pdfReportService');
 
+const getStartOfToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+};
+
 /**
- * Get all datasets with live aggregated metrics
+ * Get all datasets with live aggregated metrics and user attribution
  */
 exports.getDatasets = async (req, res) => {
   try {
-    const datasets = await Dataset.find().sort({ updatedAt: -1 }).lean();
+    const user = req.user;
+    const isAgent = user && user.role === 'agent';
+
+    // Role-based scoping: Agents only see datasets they created; Super Admin sees all
+    const datasetQuery = {};
+    if (isAgent) {
+      datasetQuery.createdBy = user._id;
+    }
+
+    const datasets = await Dataset.find(datasetQuery).sort({ updatedAt: -1 }).lean();
 
     const enrichedDatasets = await Promise.all(datasets.map(async (ds) => {
-      const leads = await Lead.find({ datasetId: ds._id }).lean();
+      const leadQuery = { datasetId: ds._id };
+      if (isAgent) {
+        leadQuery.extractedBy = user._id;
+      }
+
+      const leads = await Lead.find(leadQuery).lean();
       const totalLeads = leads.length;
       const uncontactedCount = leads.filter(l => l.callStatus === 'Uncontacted').length;
       const unreachableCount = leads.filter(l => l.callStatus === 'Unreachable').length;
@@ -21,6 +40,7 @@ exports.getDatasets = async (req, res) => {
 
       return {
         ...ds,
+        createdByName: ds.createdByName || 'Super Admin',
         totalLeads,
         uncontactedCount,
         unreachableCount,
@@ -50,13 +70,23 @@ exports.getDatasetById = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const status = req.query.status || 'ALL';
     const search = req.query.search || '';
+    const user = req.user;
+    const isAgent = user && user.role === 'agent';
 
     const dataset = await Dataset.findById(id).lean();
     if (!dataset) {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
+    if (isAgent && dataset.createdBy && dataset.createdBy.toString() !== user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only view datasets created by your account.' });
+    }
+
     const query = { datasetId: id };
+    if (isAgent) {
+      query.extractedBy = user._id;
+    }
+
     if (status && status !== 'ALL') {
       query.callStatus = status;
     }
@@ -76,7 +106,10 @@ exports.getDatasetById = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const allDatasetLeads = await Lead.find({ datasetId: id }).lean();
+    const baseLeadQuery = { datasetId: id };
+    if (isAgent) baseLeadQuery.extractedBy = user._id;
+
+    const allDatasetLeads = await Lead.find(baseLeadQuery).lean();
     const statusCounts = {
       Uncontacted: allDatasetLeads.filter(l => l.callStatus === 'Uncontacted').length,
       Unreachable: allDatasetLeads.filter(l => l.callStatus === 'Unreachable').length,
@@ -91,7 +124,10 @@ exports.getDatasetById = async (req, res) => {
     res.json({
       success: true,
       data: {
-        dataset,
+        dataset: {
+          ...dataset,
+          createdByName: dataset.createdByName || 'Super Admin'
+        },
         leads,
         statusCounts,
         pagination: {
@@ -111,7 +147,7 @@ exports.getDatasetById = async (req, res) => {
 };
 
 /**
- * Update Dataset Name & Description
+ * Update Dataset details
  */
 exports.updateDataset = async (req, res) => {
   try {
@@ -123,7 +159,11 @@ exports.updateDataset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
-    if (name && name.trim()) dataset.name = name.trim();
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only edit datasets created by your account.' });
+    }
+
+    if (name) dataset.name = name.trim();
     if (description !== undefined) dataset.description = description.trim();
 
     await dataset.save();
@@ -150,6 +190,10 @@ exports.deleteDataset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only delete datasets created by your account.' });
+    }
+
     const deleteResult = await Lead.deleteMany({ datasetId: id });
     await Dataset.findByIdAndDelete(id);
 
@@ -164,7 +208,7 @@ exports.deleteDataset = async (req, res) => {
 };
 
 /**
- * Append GMB extraction results to an existing dataset
+ * Append GMB extraction results to an existing dataset with agent limit checks
  */
 exports.appendLeadsToDataset = async (req, res) => {
   try {
@@ -176,15 +220,48 @@ exports.appendLeadsToDataset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only append leads to datasets created by your account.' });
+    }
+
+    const targetMax = Math.min(100, Math.max(1, parseInt(maxResults, 10) || 10));
+    const user = req.user;
+    const isSuperAdmin = !user || user.role === 'superadmin';
+
+    // Agent Daily Quota Enforcement
+    if (!isSuperAdmin && user) {
+      const dailyLimit = user.dailyGmbLimit || 150;
+      const usedToday = await Lead.countDocuments({
+        extractedBy: user._id,
+        createdAt: { $gte: getStartOfToday() }
+      });
+      const remainingToday = Math.max(0, dailyLimit - usedToday);
+
+      if (remainingToday <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Daily extraction limit reached (${dailyLimit}/${dailyLimit} profiles used today). Please contact your Super Administrator.`
+        });
+      }
+
+      if (targetMax > remainingToday) {
+        return res.status(400).json({
+          success: false,
+          message: `Requested extraction (${targetMax} profiles) exceeds your remaining daily limit of ${remainingToday} profiles.`
+        });
+      }
+    }
+
     const result = await gmbScraperService.scrapeLeads({
       keyword: keyword || dataset.keyword,
       area: area || dataset.area,
-      maxResults: parseInt(maxResults, 10) || 10,
+      maxResults: targetMax,
       noWebsiteOnly,
       recentlyRegistered,
       maxRating,
       strictSearch,
-      datasetId: id
+      datasetId: id,
+      user
     });
 
     res.json({
@@ -209,7 +286,16 @@ exports.getDatasetQueue = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
-    const queue = await Lead.find({ datasetId: id })
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only queue datasets created by your account.' });
+    }
+
+    const query = { datasetId: id };
+    if (req.user && req.user.role === 'agent') {
+      query.extractedBy = req.user._id;
+    }
+
+    const queue = await Lead.find(query)
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
 
@@ -236,22 +322,37 @@ exports.exportDataset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
-    const leads = await Lead.find({ datasetId: id }).lean();
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only export datasets created by your account.' });
+    }
+
+    const query = { datasetId: id };
+    if (req.user && req.user.role === 'agent') {
+      query.extractedBy = req.user._id;
+    }
+
+    const leads = await Lead.find(query).lean();
 
     const headers = ['Business Name', 'Category', 'Area', 'Rating', 'Reviews', 'Phone', 'Email', 'Website', 'Address', 'Call Status', 'Follow Up Date'];
-    const rows = leads.map(l => [
-      `"${(l.businessName || '').replace(/"/g, '""')}"`,
-      `"${(l.category || '').replace(/"/g, '""')}"`,
-      `"${(l.area || '').replace(/"/g, '""')}"`,
-      l.rating || 0,
-      l.reviewCount || 0,
-      `"${(l.phoneNumber || '').replace(/"/g, '""')}"`,
-      `"${(l.email || '').replace(/"/g, '""')}"`,
-      `"${(l.website || '').replace(/"/g, '""')}"`,
-      `"${(l.address || '').replace(/"/g, '""')}"`,
-      `"${(l.callStatus || '').replace(/"/g, '""')}"`,
-      l.followUpDate ? new Date(l.followUpDate).toISOString() : ''
-    ]);
+    if (!req.user || req.user.role === 'superadmin') headers.push('Created By');
+
+    const rows = leads.map(l => {
+      const row = [
+        `"${(l.businessName || '').replace(/"/g, '""')}"`,
+        `"${(l.category || '').replace(/"/g, '""')}"`,
+        `"${(l.area || '').replace(/"/g, '""')}"`,
+        l.rating || 0,
+        l.reviewCount || 0,
+        `"${(l.phoneNumber || '').replace(/"/g, '""')}"`,
+        `"${(l.email || '').replace(/"/g, '""')}"`,
+        `"${(l.website || '').replace(/"/g, '""')}"`,
+        `"${(l.address || '').replace(/"/g, '""')}"`,
+        `"${(l.callStatus || '').replace(/"/g, '""')}"`,
+        l.followUpDate ? new Date(l.followUpDate).toISOString() : ''
+      ];
+      if (!req.user || req.user.role === 'superadmin') row.push(`"${l.extractedByName || 'Super Admin'}"`);
+      return row;
+    });
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 
@@ -275,7 +376,16 @@ exports.exportDatasetPdf = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dataset not found.' });
     }
 
-    const leads = await Lead.find({ datasetId: id }).sort({ rating: -1, reviewCount: -1 }).lean();
+    if (req.user && req.user.role === 'agent' && dataset.createdBy && dataset.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You can only export datasets created by your account.' });
+    }
+
+    const query = { datasetId: id };
+    if (req.user && req.user.role === 'agent') {
+      query.extractedBy = req.user._id;
+    }
+
+    const leads = await Lead.find(query).sort({ rating: -1, reviewCount: -1 }).lean();
     await pdfReportService.generateDatasetPdf(dataset, leads, res);
   } catch (error) {
     console.error('[Dataset Controller] exportDatasetPdf error:', error);

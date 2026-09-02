@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLead } from '../../context/LeadContext';
+import { useAuth } from '../../context/AuthContext';
 import { LeadService } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import StatusBadge from '../common/StatusBadge';
@@ -21,10 +22,12 @@ import {
   MoreVertical,
   CheckSquare,
   Square,
-  ExternalLink
+  ExternalLink,
+  User
 } from 'lucide-react';
 
 const LeadsDatabase = () => {
+  const { isSuperAdmin } = useAuth();
   const { 
     leads, 
     loadingLeads, 
@@ -45,8 +48,8 @@ const LeadsDatabase = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newLeadForm, setNewLeadForm] = useState({
     businessName: '',
-    category: 'Roofing',
-    area: 'Miami, FL',
+    category: 'Real Estate',
+    area: 'Gulberg, Lahore',
     phoneNumber: '',
     email: '',
     website: '',
@@ -122,8 +125,8 @@ const LeadsDatabase = () => {
         setIsAddModalOpen(false);
         setNewLeadForm({
           businessName: '',
-          category: 'Roofing',
-          area: 'Miami, FL',
+          category: 'Real Estate',
+          area: 'Gulberg, Lahore',
           phoneNumber: '',
           email: '',
           website: '',
@@ -261,6 +264,9 @@ const LeadsDatabase = () => {
               <th className="p-3.5">Digital Footprint</th>
               <th className="p-3.5">Call Status</th>
               <th className="p-3.5">Emails Sent</th>
+              {isSuperAdmin && (
+                <th className="p-3.5">Created By</th>
+              )}
               <th className="p-3.5 text-right">Actions</th>
             </tr>
           </thead>
@@ -269,13 +275,13 @@ const LeadsDatabase = () => {
           <tbody className="divide-y divide-[#1A1A1A]">
             {loadingLeads ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-zinc-500">
+                <td colSpan={isSuperAdmin ? 9 : 8} className="p-8 text-center text-zinc-500">
                   Loading leads database...
                 </td>
               </tr>
             ) : leads.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-zinc-500">
+                <td colSpan={isSuperAdmin ? 9 : 8} className="p-8 text-center text-zinc-500">
                   No records matching the filter criteria.
                 </td>
               </tr>
@@ -365,6 +371,15 @@ const LeadsDatabase = () => {
                       </span>
                     </td>
 
+                    {/* Created By (Super Admin Only) */}
+                    {isSuperAdmin && (
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="px-2 py-0.5 bg-[#141418] border border-[#2B2B36] text-[10px] font-mono text-zinc-300">
+                          {lead.extractedByName || 'Super Admin'}
+                        </span>
+                      </td>
+                    )}
+
                     {/* Actions */}
                     <td className="p-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
@@ -381,17 +396,19 @@ const LeadsDatabase = () => {
                           <ExternalLink className="w-3.5 h-3.5" />
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedLeadIds([lead._id]);
-                            setIsCampaignModalOpen(true);
-                          }}
-                          title="Send Email Proposal"
-                          className="p-1.5 bg-[#141414] hover:bg-blue-600 hover:text-white text-blue-400 border border-[#2B2B2B] transition-colors cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedLeadIds([lead._id]);
+                              setIsCampaignModalOpen(true);
+                            }}
+                            title="Send Email Proposal"
+                            className="p-1.5 bg-[#141414] hover:bg-blue-600 hover:text-white text-blue-400 border border-[#2B2B2B] transition-colors cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
 

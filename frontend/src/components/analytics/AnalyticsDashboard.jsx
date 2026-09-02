@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnalyticsService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 const AnalyticsDashboard = () => {
+  const { isSuperAdmin, user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +41,7 @@ const AnalyticsDashboard = () => {
   if (loading) {
     return (
       <div className="p-12 text-center text-zinc-500 font-mono text-xs">
-        Loading cross-dataset performance metrics...
+        Loading performance metrics...
       </div>
     );
   }
@@ -65,12 +67,21 @@ const AnalyticsDashboard = () => {
       {/* Top Header */}
       <div className="bg-[#0A0A0A] border border-[#262626] p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
-            <span className="w-2 h-2 bg-blue-500 inline-block" />
-            Cross-Dataset Outreach &amp; Conversion Analytics
-          </h2>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-none inline-block ${isSuperAdmin ? 'bg-purple-500' : 'bg-blue-500'}`} />
+            <h2 className="text-base font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+              <span>{isSuperAdmin ? 'Company Outreach & Conversion Analytics' : 'Agent Performance & Conversion Analytics'}</span>
+              <span className={`text-[10px] px-2 py-0.2 rounded font-bold uppercase ${
+                isSuperAdmin ? 'bg-purple-950 text-purple-300 border border-purple-800' : 'bg-blue-950 text-blue-300 border border-blue-800'
+              }`}>
+                {isSuperAdmin ? 'Full Team Scope' : `${user?.name || 'Agent'} Scope`}
+              </span>
+            </h2>
+          </div>
           <p className="text-xs text-zinc-400 font-mono mt-0.5">
-            Aggregated conversion funnels across {kpis.totalDatasets || 0} active datasets with campaign benchmarking.
+            {isSuperAdmin 
+              ? `Aggregated conversion funnels across full company team (${kpis.totalDatasets || 0} datasets, ${kpis.totalLeads || 0} leads).`
+              : `Outreach metrics calculated strictly for your extracted GMB leads (${kpis.totalDatasets || 0} datasets, ${kpis.totalLeads || 0} leads).`}
           </p>
         </div>
 
