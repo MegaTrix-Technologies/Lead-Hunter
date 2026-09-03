@@ -26,7 +26,15 @@ api.interceptors.request.use((config) => {
 export const AuthService = {
   login: (credentials) => api.post('/auth/login', credentials),
   getMe: () => api.get('/auth/me'),
-  changePassword: (data) => api.post('/auth/change-password', data)
+  changePassword: (data) => api.post('/auth/change-password', data),
+  getCurrentUser: () => {
+    try {
+      const session = localStorage.getItem('megatrix_auth_session');
+      return session ? JSON.parse(session) : null;
+    } catch (e) {
+      return null;
+    }
+  }
 };
 
 export const UserService = {

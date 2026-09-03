@@ -8,6 +8,7 @@ const LeadContext = createContext(null);
 const VIEW_TO_PATH = {
   scraper: '/Gmb-Extractor',
   workstation: '/Cold-Calling',
+  products: '/Product-Catalog',
   email: '/Email-Proposals',
   crm: '/Leads-Database',
   kanban: '/Sales-Pipeline',
@@ -21,6 +22,8 @@ const PATH_TO_VIEW = {
   '/scraper': 'scraper',
   '/cold-calling': 'workstation',
   '/workstation': 'workstation',
+  '/product-catalog': 'products',
+  '/products': 'products',
   '/email-proposals': 'email',
   '/email': 'email',
   '/leads-database': 'crm',
@@ -29,7 +32,8 @@ const PATH_TO_VIEW = {
   '/kanban': 'kanban',
   '/analytics': 'analytics',
   '/settings': 'settings',
-  '/limits-and-credits': 'settings'
+  '/limits-and-credits': 'settings',
+  '/login': 'login'
 };
 
 const getViewFromPath = (pathname) => {
@@ -444,10 +448,17 @@ export const LeadProvider = ({ children }) => {
     }
   };
 
-  // Initial load
+  // Initial load - only prefetch if authenticated session exists
   useEffect(() => {
-    fetchDatasets();
-    fetchLeads(1);
+    try {
+      const session = localStorage.getItem('megatrix_auth_session');
+      if (session) {
+        fetchDatasets();
+        fetchLeads(1);
+      }
+    } catch (e) {
+      // Ignore localStorage access error
+    }
   }, []);
 
   return (

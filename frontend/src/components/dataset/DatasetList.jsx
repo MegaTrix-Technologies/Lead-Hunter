@@ -14,16 +14,16 @@ import {
 import { useLead } from '../../context/LeadContext';
 import DatasetCard from './DatasetCard';
 import AppendSearchModal from './AppendSearchModal';
-import { AuthService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const ITEMS_PER_PAGE = 9;
 
 const DatasetList = ({ onViewLeads }) => {
   const { datasets, loadingDatasets, fetchDatasets, setAppendModalDataset } = useLead();
+  const { user, isSuperAdmin } = useAuth();
   const [searchFilter, setSearchFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const currentUser = AuthService.getCurrentUser();
-  const isAgent = currentUser && currentUser.role === 'agent';
+  const isAgent = user?.role === 'agent' || !isSuperAdmin;
 
   // Reset to page 1 whenever the search filter changes
   useEffect(() => {
