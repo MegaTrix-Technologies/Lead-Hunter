@@ -13,7 +13,8 @@ import {
   Zap,
   LogOut,
   ChevronDown,
-  Package
+  Package,
+  Landmark
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -38,6 +39,7 @@ const Navbar = () => {
       badgeColor: 'bg-blue-600'
     },
     { id: 'products', label: 'Product Catalog', icon: Package, badge: null },
+    { id: 'accounts', label: 'Accounts Manager', icon: Landmark, badge: null, superAdminOnly: true },
     { id: 'email', label: 'Email Proposals', icon: Mail, badge: null, superAdminOnly: true },
     { 
       id: 'crm', 

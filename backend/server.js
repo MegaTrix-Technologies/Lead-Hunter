@@ -15,6 +15,7 @@ const datasetRoutes = require('./routes/datasetRoutes');
 const scraperRoutes = require('./routes/scraperRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const accountRoutes = require('./routes/accountRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +47,7 @@ app.use('/api/datasets', datasetRoutes);
 app.use('/api/scraper', scraperRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/accounts', accountRoutes);
 
 // Health Check
 app.get('/api/health', (req, res) => {

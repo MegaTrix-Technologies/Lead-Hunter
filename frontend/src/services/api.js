@@ -96,4 +96,13 @@ export const ProductService = {
   deleteProduct: (id) => api.delete(`/products/${id}`)
 };
 
+export const AccountService = {
+  getSummary: (params) => api.get('/accounts/summary', { params }),
+  getSales: (params) => api.get('/accounts/sales', { params }),
+  getExpenses: (params) => api.get('/accounts/expenses', { params }),
+  getReport: (params) => api.get('/accounts/report', { params }),
+  exportExcel: (params) => api.get('/accounts/export-excel', { params, responseType: 'blob' }),
+  exportPdf: (params) => api.get('/accounts/export-pdf', { params, responseType: 'blob' })
+};
+
 export default api;

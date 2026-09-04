@@ -13,6 +13,7 @@ import KanbanPipeline from './components/crm/KanbanPipeline';
 import AnalyticsDashboard from './components/analytics/AnalyticsDashboard';
 import SettingsView from './components/settings/SettingsView';
 import ProductCatalogView from './components/products/ProductCatalogView';
+import AccountsManagerView from './components/accounts/AccountsManagerView';
 import EmailCampaignModal from './components/email/EmailCampaignModal';
 import DeliveryReportModal from './components/email/DeliveryReportModal';
 import AppendSearchModal from './components/dataset/AppendSearchModal';
@@ -30,8 +31,13 @@ function App() {
         navigate('/login', { replace: true });
       }
     } else {
-      // If agent attempts to navigate to email proposals directly, bounce to Gmb-Extractor
-      if (!isSuperAdmin && (location.pathname.toLowerCase() === '/email-proposals' || activeView === 'email')) {
+      // If agent attempts to navigate to restricted views directly, bounce to Gmb-Extractor
+      const isRestrictedPath = location.pathname.toLowerCase() === '/email-proposals' ||
+                               location.pathname.toLowerCase() === '/accounts-manager' ||
+                               location.pathname.toLowerCase() === '/accounts';
+      const isRestrictedView = activeView === 'email' || activeView === 'accounts';
+
+      if (!isSuperAdmin && (isRestrictedPath || isRestrictedView)) {
         setActiveView('scraper');
         navigate('/Gmb-Extractor', { replace: true });
         return;
@@ -88,6 +94,10 @@ function App() {
 
         {activeView === 'products' && (
           <ProductCatalogView />
+        )}
+
+        {activeView === 'accounts' && isSuperAdmin && (
+          <AccountsManagerView />
         )}
 
         {activeView === 'email' && (
