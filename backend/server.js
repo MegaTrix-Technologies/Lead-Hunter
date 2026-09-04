@@ -16,6 +16,10 @@ const scraperRoutes = require('./routes/scraperRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const accountRoutes = require('./routes/accountRoutes');
+const saleRoutes = require('./routes/saleRoutes');
+const projectRoutes = require('./routes/projectRoutes');
+const commissionRoutes = require('./routes/commissionRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -48,6 +52,10 @@ app.use('/api/scraper', scraperRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/accounts', accountRoutes);
+app.use('/api/sales', saleRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/commissions', commissionRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health Check
 app.get('/api/health', (req, res) => {

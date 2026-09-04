@@ -6,19 +6,29 @@ import { useToast } from './ToastContext';
 const LeadContext = createContext(null);
 
 const VIEW_TO_PATH = {
-  scraper: '/Gmb-Extractor',
+  dashboard: '/Dashboard',
   workstation: '/Cold-Calling',
-  products: '/Product-Catalog',
+  closer: '/Closer-Queue',
+  sales: '/Sales',
+  projects: '/Projects',
   accounts: '/Accounts-Manager',
-  email: '/Email-Proposals',
+  scraper: '/Gmb-Extractor',
   crm: '/Leads-Database',
   kanban: '/Sales-Pipeline',
+  products: '/Product-Catalog',
+  email: '/Email-Proposals',
   analytics: '/Analytics',
   settings: '/Settings'
 };
 
 const PATH_TO_VIEW = {
-  '/': 'scraper',
+  '/': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/closer-queue': 'closer',
+  '/closer': 'closer',
+  '/sales': 'sales',
+  '/projects': 'projects',
+  '/project-delivery': 'projects',
   '/gmb-extractor': 'scraper',
   '/scraper': 'scraper',
   '/cold-calling': 'workstation',
@@ -40,9 +50,9 @@ const PATH_TO_VIEW = {
 };
 
 const getViewFromPath = (pathname) => {
-  if (!pathname) return 'scraper';
+  if (!pathname) return 'dashboard';
   const normalized = pathname.toLowerCase().replace(/\/+$/, '') || '/';
-  return PATH_TO_VIEW[normalized] || 'scraper';
+  return PATH_TO_VIEW[normalized] || 'dashboard';
 };
 
 export const LeadProvider = ({ children }) => {
@@ -337,13 +347,14 @@ export const LeadProvider = ({ children }) => {
   /**
    * Update Call Status & Sync
    */
-  const updateCallStatus = async (leadId, callStatus, note = '', followUpDate = null, interestedProducts = []) => {
+  const updateCallStatus = async (leadId, callStatus, note = '', followUpDate = null, interestedProducts = [], additionalInfo = '') => {
     try {
       const res = await LeadService.updateCallStatus(leadId, {
         callStatus,
         note,
         followUpDate,
-        interestedProducts
+        interestedProducts,
+        additionalInfo
       });
 
       if (res.data.success) {

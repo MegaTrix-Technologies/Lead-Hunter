@@ -25,6 +25,32 @@ const UserSchema = new mongoose.Schema({
     default: 'agent',
     index: true
   },
+  roles: {
+    type: [String],
+    enum: ['super_admin', 'sales_agent', 'sales_closer', 'developer'],
+    default: ['sales_agent'],
+    index: true
+  },
+  commissionRates: {
+    leadGenPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    closerPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    developerPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    }
+  },
   status: {
     type: String,
     enum: ['active', 'blocked'],
@@ -41,7 +67,19 @@ const UserSchema = new mongoose.Schema({
     default: null
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Sync role string and roles array before save
+UserSchema.pre('save', function (next) {
+  if (this.roles && this.roles.includes('super_admin')) {
+    this.role = 'superadmin';
+  } else {
+    this.role = 'agent';
+  }
+  next();
 });
 
 // Pre-save hook to hash password if modified

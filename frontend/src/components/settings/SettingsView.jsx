@@ -52,14 +52,30 @@ const SettingsView = () => {
     name: '',
     email: '',
     password: '',
-    dailyGmbLimit: 150
+    roles: ['sales_agent'],
+    dailyGmbLimit: 150,
+    commissionRates: {
+      leadGenPercent: 0,
+      closerPercent: 0,
+      developerPercent: 0
+    }
   });
   const [creatingUser, setCreatingUser] = useState(false);
 
-  // Edit Limit Modal State
+  // Edit User Modal State (Super Admin)
   const [editingUser, setEditingUser] = useState(null);
-  const [editLimitValue, setEditLimitValue] = useState(150);
-  const [updatingLimit, setUpdatingLimit] = useState(false);
+  const [editUserForm, setEditUserForm] = useState({
+    name: '',
+    dailyGmbLimit: 150,
+    roles: [],
+    commissionRates: {
+      leadGenPercent: 0,
+      closerPercent: 0,
+      developerPercent: 0
+    },
+    password: ''
+  });
+  const [updatingUser, setUpdatingUser] = useState(false);
 
   // Change Password Form State (Both Roles)
   const [passwordForm, setPasswordForm] = useState({
@@ -161,11 +177,15 @@ const SettingsView = () => {
     return `${hours < 10 ? `0${hours}` : hours}h ${minutes < 10 ? `0${minutes}` : minutes}m ${seconds < 10 ? `0${seconds}` : seconds}s`;
   };
 
-  // Handle Create Agent
+  // Handle Create User
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (!newUserForm.name || !newUserForm.email || !newUserForm.password) {
       addToast({ title: 'Validation Error', message: 'Name, email, and password are required.', type: 'error' });
+      return;
+    }
+    if (!newUserForm.roles || newUserForm.roles.length === 0) {
+      addToast({ title: 'Validation Error', message: 'Please select at least one role.', type: 'error' });
       return;
     }
     setCreatingUser(true);
@@ -174,24 +194,36 @@ const SettingsView = () => {
         name: newUserForm.name.trim(),
         email: newUserForm.email.trim().toLowerCase(),
         password: newUserForm.password,
-        role: 'agent',
-        dailyGmbLimit: parseInt(newUserForm.dailyGmbLimit, 10) || 150
+        roles: newUserForm.roles,
+        dailyGmbLimit: parseInt(newUserForm.dailyGmbLimit, 10) || 150,
+        commissionRates: {
+          leadGenPercent: parseFloat(newUserForm.commissionRates.leadGenPercent) || 0,
+          closerPercent: parseFloat(newUserForm.commissionRates.closerPercent) || 0,
+          developerPercent: parseFloat(newUserForm.commissionRates.developerPercent) || 0
+        }
       });
       if (res.data.success) {
         addToast({
-          title: 'Agent Created',
-          message: `Created agent profile for ${res.data.data.name} with ${res.data.data.dailyGmbLimit} daily GMB limit.`,
+          title: 'User Profile Created',
+          message: `Created profile for ${res.data.data.name} with roles [${(res.data.data.roles || []).join(', ')}].`,
           type: 'success',
           duration: 4000
         });
         setIsAddUserModalOpen(false);
-        setNewUserForm({ name: '', email: '', password: '', dailyGmbLimit: 150 });
+        setNewUserForm({
+          name: '',
+          email: '',
+          password: '',
+          roles: ['sales_agent'],
+          dailyGmbLimit: 150,
+          commissionRates: { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 }
+        });
         fetchUsers();
         fetchQuotas(true);
       }
     } catch (err) {
       addToast({
-        title: 'Error Creating Agent',
+        title: 'Error Creating User',
         message: err.response?.data?.message || err.message,
         type: 'error'
       });
@@ -200,7 +232,74 @@ const SettingsView = () => {
     }
   };
 
-  // Handle Block / Unblock Agent
+  // Open Edit User Modal
+  const handleOpenEditUser = (u) => {
+    const userRoles = u.roles && u.roles.length > 0 
+      ? u.roles 
+      : (u.role === 'superadmin' ? ['super_admin'] : ['sales_agent']);
+    
+    setEditingUser(u);
+    setEditUserForm({
+      name: u.name || '',
+      dailyGmbLimit: u.dailyGmbLimit || 150,
+      roles: [...userRoles],
+      commissionRates: {
+        leadGenPercent: u.commissionRates?.leadGenPercent || 0,
+        closerPercent: u.commissionRates?.closerPercent || 0,
+        developerPercent: u.commissionRates?.developerPercent || 0
+      },
+      password: ''
+    });
+  };
+
+  // Handle Save User (Roles, Commissions, Limits, Name, Password)
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editUserForm.roles || editUserForm.roles.length === 0) {
+      addToast({ title: 'Validation Error', message: 'User must have at least one role.', type: 'error' });
+      return;
+    }
+    setUpdatingUser(true);
+    try {
+      const payload = {
+        name: editUserForm.name.trim(),
+        dailyGmbLimit: parseInt(editUserForm.dailyGmbLimit, 10) || 150,
+        roles: editUserForm.roles,
+        commissionRates: {
+          leadGenPercent: parseFloat(editUserForm.commissionRates.leadGenPercent) || 0,
+          closerPercent: parseFloat(editUserForm.commissionRates.closerPercent) || 0,
+          developerPercent: parseFloat(editUserForm.commissionRates.developerPercent) || 0
+        }
+      };
+      if (editUserForm.password && editUserForm.password.trim().length >= 6) {
+        payload.password = editUserForm.password.trim();
+      }
+
+      const res = await UserService.updateUser(editingUser._id, payload);
+      if (res.data.success) {
+        addToast({
+          title: 'User Profile Updated',
+          message: `Successfully updated profile, roles, and commissions for ${editingUser.name}.`,
+          type: 'success',
+          duration: 3000
+        });
+        setEditingUser(null);
+        fetchUsers();
+        fetchQuotas(true);
+      }
+    } catch (err) {
+      addToast({
+        title: 'Error Updating User',
+        message: err.response?.data?.message || err.message,
+        type: 'error'
+      });
+    } finally {
+      setUpdatingUser(false);
+    }
+  };
+
+  // Handle Block / Unblock User
   const handleToggleUserStatus = async (user) => {
     const nextStatus = user.status === 'active' ? 'blocked' : 'active';
     try {
@@ -220,36 +319,6 @@ const SettingsView = () => {
         message: err.response?.data?.message || err.message,
         type: 'error'
       });
-    }
-  };
-
-  // Handle Update Daily Limit
-  const handleSaveLimit = async () => {
-    if (!editingUser) return;
-    setUpdatingLimit(true);
-    try {
-      const res = await UserService.updateUser(editingUser._id, {
-        dailyGmbLimit: parseInt(editLimitValue, 10) || 150
-      });
-      if (res.data.success) {
-        addToast({
-          title: 'Limit Updated',
-          message: `Updated daily GMB limit for ${editingUser.name} to ${editLimitValue} profiles/day.`,
-          type: 'success',
-          duration: 3000
-        });
-        setEditingUser(null);
-        fetchUsers();
-        fetchQuotas(true);
-      }
-    } catch (err) {
-      addToast({
-        title: 'Error Updating Limit',
-        message: err.response?.data?.message || err.message,
-        type: 'error'
-      });
-    } finally {
-      setUpdatingLimit(false);
     }
   };
 
@@ -428,7 +497,8 @@ const SettingsView = () => {
                   <thead>
                     <tr className="border-b border-[#222222] bg-[#0C0C0C] text-zinc-400 uppercase tracking-wider text-[11px]">
                       <th className="p-3.5">Agent / User</th>
-                      <th className="p-3.5">Role</th>
+                      <th className="p-3.5">Assigned Roles</th>
+                      <th className="p-3.5">Commission Rates</th>
                       <th className="p-3.5">Daily GMB Limit</th>
                       <th className="p-3.5">Today's Usage</th>
                       <th className="p-3.5">Total Extracted</th>
@@ -439,20 +509,23 @@ const SettingsView = () => {
                   <tbody className="divide-y divide-[#1A1A1A]">
                     {loadingUsers ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-500">
+                        <td colSpan={8} className="p-8 text-center text-zinc-500">
                           Loading agent profiles...
                         </td>
                       </tr>
                     ) : users.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-500">
+                        <td colSpan={8} className="p-8 text-center text-zinc-500">
                           No users registered yet.
                         </td>
                       </tr>
                     ) : (
                       users.map(u => {
                         const isSelf = u._id === currentUser?._id;
-                        const isSuper = u.role === 'superadmin';
+                        const isSuper = u.roles?.includes('super_admin') || u.role === 'superadmin';
+                        const userRoles = u.roles && u.roles.length > 0 
+                          ? u.roles 
+                          : (isSuper ? ['super_admin'] : ['sales_agent']);
 
                         return (
                           <tr key={u._id} className="hover:bg-[#121216] transition-colors">
@@ -467,15 +540,41 @@ const SettingsView = () => {
                               <div className="text-[10px] text-zinc-500 mt-0.5">{u.email}</div>
                             </td>
 
-                            {/* Role */}
+                            {/* Assigned Roles */}
                             <td className="p-3.5 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded ${
-                                isSuper 
-                                  ? 'bg-purple-950/60 text-purple-300 border border-purple-800' 
-                                  : 'bg-blue-950/60 text-blue-300 border border-blue-800'
-                              }`}>
-                                {isSuper ? 'SUPER ADMIN' : 'AGENT'}
-                              </span>
+                              <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                {userRoles.map(r => {
+                                  let label = r;
+                                  let style = 'bg-zinc-900 text-zinc-300 border-zinc-700';
+                                  if (r === 'super_admin') {
+                                    label = 'SUPER ADMIN';
+                                    style = 'bg-purple-950/70 text-purple-300 border-purple-800';
+                                  } else if (r === 'sales_agent') {
+                                    label = 'SALES AGENT';
+                                    style = 'bg-blue-950/70 text-blue-300 border-blue-800';
+                                  } else if (r === 'sales_closer') {
+                                    label = 'CLOSER';
+                                    style = 'bg-emerald-950/70 text-emerald-300 border-emerald-800';
+                                  } else if (r === 'developer') {
+                                    label = 'DEVELOPER';
+                                    style = 'bg-amber-950/70 text-amber-300 border-amber-800';
+                                  }
+                                  return (
+                                    <span key={r} className={`px-1.5 py-0.5 text-[9px] uppercase font-bold rounded border ${style}`}>
+                                      {label}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </td>
+
+                            {/* Commission Rates */}
+                            <td className="p-3.5 whitespace-nowrap font-mono text-[11px]">
+                              <div className="space-y-0.5 text-zinc-400">
+                                <div>LG: <span className="text-white font-bold">{u.commissionRates?.leadGenPercent || 0}%</span></div>
+                                <div>Closer: <span className="text-white font-bold">{u.commissionRates?.closerPercent || 0}%</span></div>
+                                <div>Dev: <span className="text-white font-bold">{u.commissionRates?.developerPercent || 0}%</span></div>
+                              </div>
                             </td>
 
                             {/* Daily GMB Limit */}
@@ -483,20 +582,9 @@ const SettingsView = () => {
                               {isSuper ? (
                                 <span className="text-zinc-500 italic">Unlimited</span>
                               ) : (
-                                <div className="flex items-center gap-2">
+                                <div>
                                   <span className="font-bold text-white">{u.dailyGmbLimit || 150}</span>
-                                  <span className="text-zinc-500 text-[10px]">profiles/day</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingUser(u);
-                                      setEditLimitValue(u.dailyGmbLimit || 150);
-                                    }}
-                                    title="Edit Daily Limit"
-                                    className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                  >
-                                    <Edit3 className="w-3 h-3 text-blue-400" />
-                                  </button>
+                                  <span className="text-zinc-500 text-[10px] ml-1">profiles/day</span>
                                 </div>
                               )}
                             </td>
@@ -529,37 +617,49 @@ const SettingsView = () => {
 
                             {/* Actions */}
                             <td className="p-3.5 text-right whitespace-nowrap">
-                              {!isSuper && (
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {/* Block / Unblock Toggle */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleUserStatus(u)}
-                                    title={u.status === 'active' ? 'Block Agent Access' : 'Unblock Agent Access'}
-                                    className={`p-1.5 border text-xs cursor-pointer transition-colors ${
-                                      u.status === 'active'
-                                        ? 'bg-[#141414] hover:bg-rose-950/50 text-zinc-400 hover:text-rose-300 border-[#2B2B2B] hover:border-rose-700'
-                                        : 'bg-[#141414] hover:bg-emerald-950/50 text-emerald-400 border-[#2B2B2B] hover:border-emerald-700'
-                                    }`}
-                                  >
-                                    {u.status === 'active' ? (
-                                      <UserX className="w-3.5 h-3.5" />
-                                    ) : (
-                                      <UserCheck className="w-3.5 h-3.5" />
-                                    )}
-                                  </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Edit User Profile & Roles */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditUser(u)}
+                                  title="Edit User Profile, Roles & Commissions"
+                                  className="p-1.5 bg-[#141414] hover:bg-blue-950/60 text-zinc-400 hover:text-blue-300 border border-[#2B2B2B] hover:border-blue-700 transition-colors cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
 
-                                  {/* Delete Agent */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteUser(u)}
-                                    title="Delete Agent Permanently"
-                                    className="p-1.5 bg-[#141414] hover:bg-rose-950/50 text-zinc-400 hover:text-rose-300 border border-[#2B2B2B] hover:border-rose-700 transition-colors cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
+                                {!isSuper && (
+                                  <>
+                                    {/* Block / Unblock Toggle */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleUserStatus(u)}
+                                      title={u.status === 'active' ? 'Block Agent Access' : 'Unblock Agent Access'}
+                                      className={`p-1.5 border text-xs cursor-pointer transition-colors ${
+                                        u.status === 'active'
+                                          ? 'bg-[#141414] hover:bg-rose-950/50 text-zinc-400 hover:text-rose-300 border-[#2B2B2B] hover:border-rose-700'
+                                          : 'bg-[#141414] hover:bg-emerald-950/50 text-emerald-400 border-[#2B2B2B] hover:border-emerald-700'
+                                      }`}
+                                    >
+                                      {u.status === 'active' ? (
+                                        <UserX className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <UserCheck className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+
+                                    {/* Delete Agent */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUser(u)}
+                                      title="Delete Agent Permanently"
+                                      className="p-1.5 bg-[#141414] hover:bg-rose-950/50 text-zinc-400 hover:text-rose-300 border border-[#2B2B2B] hover:border-rose-700 transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -984,15 +1084,15 @@ const SettingsView = () => {
 
       </div>
 
-      {/* ─── MODAL 1: CREATE AGENT PROFILE MODAL ─────────────────────────────── */}
+      {/* ─── MODAL 1: CREATE USER PROFILE MODAL ─────────────────────────────── */}
       {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-md p-6 space-y-5 shadow-2xl relative font-mono">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-lg p-6 space-y-5 shadow-2xl relative font-mono my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Create New Agent Profile
+                  Create New User Profile
                 </h3>
               </div>
               <button
@@ -1005,64 +1105,160 @@ const SettingsView = () => {
             </div>
 
             <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-zinc-400 font-bold uppercase mb-1">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Alex Morgan"
-                  value={newUserForm.name}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Alex Morgan"
+                    value={newUserForm.name}
+                    onChange={(e) => setNewUserForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. alex@megatrixai.com"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 font-bold uppercase mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. alex@megatrixai.com"
-                  value={newUserForm.email}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Initial Password *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Min 6 characters"
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Daily GMB Limit (Profiles/Day)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5000"
+                    required
+                    value={newUserForm.dailyGmbLimit}
+                    onChange={(e) => setNewUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 font-bold uppercase mb-1">
-                  Initial Password
+              {/* Roles Selection (Checkboxes) */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                  Assign Roles (Select all that apply) *
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter initial agent password"
-                  value={newUserForm.password}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                />
+                <div className="space-y-2 pt-1">
+                  {[
+                    { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
+                    { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
+                    { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
+                  ].map(r => {
+                    const checked = newUserForm.roles.includes(r.id);
+                    return (
+                      <label 
+                        key={r.id} 
+                        className={`flex items-start gap-2.5 p-2 border cursor-pointer transition-colors ${
+                          checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewUserForm(prev => ({ ...prev, roles: [...prev.roles, r.id] }));
+                            } else {
+                              setNewUserForm(prev => ({ ...prev, roles: prev.roles.filter(id => id !== r.id) }));
+                            }
+                          }}
+                          className="mt-0.5 rounded-none accent-blue-500"
+                        />
+                        <div>
+                          <div className="font-bold text-xs">{r.label}</div>
+                          <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 font-bold uppercase mb-1">
-                  Daily GMB Extraction Limit (Profiles / Day)
+              {/* Commission Rates */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                  Commission Rates (% of Sale Amount upon Full Cash Collection)
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="5000"
-                  required
-                  value={newUserForm.dailyGmbLimit}
-                  onChange={(e) => setNewUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
-                  className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                />
-                <span className="text-[10px] text-zinc-500 mt-1 block">
-                  Agent will be limited to extracting this many profiles every 24 hours.
-                </span>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Lead Gen %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={newUserForm.commissionRates.leadGenPercent}
+                      onChange={(e) => setNewUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, leadGenPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Closer %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={newUserForm.commissionRates.closerPercent}
+                      onChange={(e) => setNewUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, closerPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Developer %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={newUserForm.commissionRates.developerPercent}
+                      onChange={(e) => setNewUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, developerPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1E1E1E]">
@@ -1079,7 +1275,7 @@ const SettingsView = () => {
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
-                  <span>{creatingUser ? 'Creating...' : 'Create Agent'}</span>
+                  <span>{creatingUser ? 'Creating...' : 'Create User'}</span>
                 </button>
               </div>
             </form>
@@ -1087,15 +1283,15 @@ const SettingsView = () => {
         </div>
       )}
 
-      {/* ─── MODAL 2: EDIT DAILY GMB LIMIT MODAL ─────────────────────────────── */}
+      {/* ─── MODAL 2: EDIT USER PROFILE, ROLES & COMMISSIONS MODAL ──────────── */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-sm p-6 space-y-4 shadow-2xl relative font-mono text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-lg p-6 space-y-5 shadow-2xl relative font-mono text-xs my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-blue-400" />
                 <h3 className="font-bold text-white uppercase tracking-wider">
-                  Edit Daily Limit
+                  Edit User Profile &amp; Role Settings
                 </h3>
               </div>
               <button
@@ -1107,43 +1303,182 @@ const SettingsView = () => {
               </button>
             </div>
 
-            <div>
-              <div className="text-zinc-400 font-bold">{editingUser.name}</div>
-              <div className="text-zinc-500 text-[10px]">{editingUser.email}</div>
-            </div>
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUserForm.name}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-zinc-400 font-bold uppercase mb-1">
-                New Daily GMB Limit (Profiles / Day)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="5000"
-                value={editLimitValue}
-                onChange={(e) => setEditLimitValue(parseInt(e.target.value, 10) || 0)}
-                className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-              />
-            </div>
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingUser.email}
+                    className="w-full px-3 py-2 bg-[#121212] border border-[#262626] text-zinc-500 font-mono cursor-not-allowed"
+                  />
+                </div>
+              </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#1E1E1E]">
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="px-3.5 py-1.5 bg-[#121212] hover:bg-[#1A1A1A] text-zinc-300 font-bold uppercase tracking-wider cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveLimit}
-                disabled={updatingLimit}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{updatingLimit ? 'Saving...' : 'Save Limit'}</span>
-              </button>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Daily GMB Extraction Limit
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5000"
+                    required
+                    value={editUserForm.dailyGmbLimit}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 font-bold uppercase mb-1">
+                    Reset Password (Optional)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Leave blank to keep unchanged"
+                    value={editUserForm.password}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Roles Selection (Checkboxes) */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                  Assigned Roles (Select all that apply) *
+                </label>
+                <div className="space-y-2 pt-1">
+                  {[
+                    { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
+                    { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
+                    { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
+                  ].map(r => {
+                    const checked = editUserForm.roles.includes(r.id);
+                    return (
+                      <label 
+                        key={r.id} 
+                        className={`flex items-start gap-2.5 p-2 border cursor-pointer transition-colors ${
+                          checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditUserForm(prev => ({ ...prev, roles: [...prev.roles, r.id] }));
+                            } else {
+                              setEditUserForm(prev => ({ ...prev, roles: prev.roles.filter(id => id !== r.id) }));
+                            }
+                          }}
+                          className="mt-0.5 rounded-none accent-blue-500"
+                        />
+                        <div>
+                          <div className="font-bold text-xs">{r.label}</div>
+                          <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                  {editUserForm.roles.includes('super_admin') && (
+                    <div className="p-2 bg-purple-950/40 border border-purple-800 text-purple-300 text-[11px] font-bold">
+                      Super Administrator Role Active (Root System Privileges)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Commission Rates */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                  Commission Rates (% of Sale Amount upon Full Cash Collection)
+                </label>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Lead Gen %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={editUserForm.commissionRates.leadGenPercent}
+                      onChange={(e) => setEditUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, leadGenPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Closer %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={editUserForm.commissionRates.closerPercent}
+                      onChange={(e) => setEditUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, closerPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase mb-1">Developer %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={editUserForm.commissionRates.developerPercent}
+                      onChange={(e) => setEditUserForm(prev => ({
+                        ...prev,
+                        commissionRates: { ...prev.commissionRates, developerPercent: e.target.value }
+                      }))}
+                      className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#1E1E1E]">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-3.5 py-1.5 bg-[#121212] hover:bg-[#1A1A1A] text-zinc-300 font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingUser}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{updatingUser ? 'Saving...' : 'Save User Settings'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

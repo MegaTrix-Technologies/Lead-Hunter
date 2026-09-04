@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const Lead = require('../models/Lead');
+const Sale = require('../models/Sale');
 const Expense = require('../models/Expense');
 const accountReportService = require('../services/accountReportService');
 
@@ -71,20 +71,19 @@ exports.getAccountsSummary = async (req, res) => {
     const { preset = 'this_month', startDate, endDate } = req.query;
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
-    // 1. Aggregate Sales from Leads with callStatus === 'Lead / Sale'
-    const salesAgg = await Lead.aggregate([
+    // 1. Aggregate Sales from Sale model
+    const salesAgg = await Sale.aggregate([
       {
         $match: {
-          callStatus: 'Lead / Sale',
-          updatedAt: { $gte: start, $lte: end }
+          closedAt: { $gte: start, $lte: end }
         }
       },
       {
         $group: {
           _id: null,
-          totalSales: { $sum: { $ifNull: ['$dealValue', 0] } },
+          totalSales: { $sum: '$totalAmount' },
           count: { $sum: 1 },
-          avgDealSize: { $avg: { $ifNull: ['$dealValue', 0] } }
+          avgDealSize: { $avg: '$totalAmount' }
         }
       }
     ]);
@@ -93,18 +92,17 @@ exports.getAccountsSummary = async (req, res) => {
     const salesCount = salesAgg[0]?.count || 0;
     const avgDealSize = Math.round(salesAgg[0]?.avgDealSize || 0);
 
-    // Sales by Category
-    const salesByCategory = await Lead.aggregate([
+    // Sales by Customer Category
+    const salesByCategory = await Sale.aggregate([
       {
         $match: {
-          callStatus: 'Lead / Sale',
-          updatedAt: { $gte: start, $lte: end }
+          closedAt: { $gte: start, $lte: end }
         }
       },
       {
         $group: {
-          _id: '$category',
-          amount: { $sum: { $ifNull: ['$dealValue', 0] } },
+          _id: { $ifNull: ['$customer.category', 'General'] },
+          amount: { $sum: '$totalAmount' },
           count: { $sum: 1 }
         }
       },
@@ -149,7 +147,7 @@ exports.getAccountsSummary = async (req, res) => {
       },
       {
         $group: {
-          _id: '$category',
+          _id: { $ifNull: ['$category', 'Miscellaneous'] },
           amount: { $sum: '$amount' },
           count: { $sum: 1 }
         }
@@ -169,21 +167,20 @@ exports.getAccountsSummary = async (req, res) => {
     const netProfit = totalSales - totalExpenses;
     const profitMargin = totalSales > 0 ? parseFloat(((netProfit / totalSales) * 100).toFixed(1)) : 0;
 
-    // 4. Generate Trend Timeline (Group by Day if range <= 45 days, otherwise Month)
+    // 4. Generate Trend Timeline
     const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     const groupByFormat = diffDays <= 45 ? '%Y-%m-%d' : '%Y-%m';
 
-    const salesTimeline = await Lead.aggregate([
+    const salesTimeline = await Sale.aggregate([
       {
         $match: {
-          callStatus: 'Lead / Sale',
-          updatedAt: { $gte: start, $lte: end }
+          closedAt: { $gte: start, $lte: end }
         }
       },
       {
         $group: {
-          _id: { $dateToString: { format: groupByFormat, date: '$updatedAt' } },
-          sales: { $sum: { $ifNull: ['$dealValue', 0] } }
+          _id: { $dateToString: { format: groupByFormat, date: '$closedAt' } },
+          sales: { $sum: '$totalAmount' }
         }
       }
     ]);
@@ -250,7 +247,7 @@ exports.getAccountsSummary = async (req, res) => {
 
 /**
  * GET /api/accounts/sales
- * Paginated sales records for the selected period
+ * Paginated sales records for the selected period from Sale model
  */
 exports.getSalesLedger = async (req, res) => {
   try {
@@ -258,19 +255,20 @@ exports.getSalesLedger = async (req, res) => {
     const { start, end } = resolveDateRange(preset, startDate, endDate);
 
     const filter = {
-      callStatus: 'Lead / Sale',
-      updatedAt: { $gte: start, $lte: end }
+      closedAt: { $gte: start, $lte: end }
     };
 
     if (category && category !== 'all') {
-      filter.category = category;
+      filter['customer.category'] = category;
     }
 
     if (search) {
+      const regex = new RegExp(search, 'i');
       filter.$or = [
-        { businessName: { $regex: search, $options: 'i' } },
-        { area: { $regex: search, $options: 'i' } },
-        { extractedByName: { $regex: search, $options: 'i' } }
+        { 'customer.businessName': regex },
+        { 'customer.area': regex },
+        { closedByName: regex },
+        { leadGeneratedByName: regex }
       ];
     }
 
@@ -279,10 +277,9 @@ exports.getSalesLedger = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [totalSales, sales] = await Promise.all([
-      Lead.countDocuments(filter),
-      Lead.find(filter)
-        .select('businessName category area dealValue interestedProducts extractedByName updatedAt phoneNumber email')
-        .sort({ updatedAt: -1 })
+      Sale.countDocuments(filter),
+      Sale.find(filter)
+        .sort({ closedAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .lean()
@@ -290,15 +287,20 @@ exports.getSalesLedger = async (req, res) => {
 
     const formattedSales = sales.map(s => ({
       id: s._id,
-      date: s.updatedAt,
-      businessName: s.businessName,
-      category: s.category,
-      area: s.area,
-      dealValue: s.dealValue || 0,
-      interestedProducts: s.interestedProducts || [],
-      extractedByName: s.extractedByName || 'Sales Desk',
-      phoneNumber: s.phoneNumber || '',
-      email: s.email || ''
+      date: s.closedAt,
+      businessName: s.customer?.businessName || 'Client',
+      category: s.customer?.category || 'General',
+      area: s.customer?.area || 'Lahore',
+      dealValue: s.totalAmount || 0,
+      advanceAmount: s.advanceAmount || 0,
+      remainingAmount: s.remainingAmount || 0,
+      status: s.status,
+      interestedProducts: s.products || [],
+      extractedByName: s.leadGeneratedByName || 'Sales Agent',
+      closedByName: s.closedByName || 'Super Admin',
+      assignedDeveloperNames: s.assignedDeveloperNames || [],
+      phoneNumber: s.customer?.phoneNumber || '',
+      email: s.customer?.email || ''
     }));
 
     res.json({
@@ -335,10 +337,12 @@ exports.getExpensesLedger = async (req, res) => {
     }
 
     if (search) {
+      const regex = new RegExp(search, 'i');
       filter.$or = [
-        { description: { $regex: search, $options: 'i' } },
-        { referenceId: { $regex: search, $options: 'i' } },
-        { category: { $regex: search, $options: 'i' } }
+        { reason: regex },
+        { description: regex },
+        { referenceId: regex },
+        { category: regex }
       ];
     }
 
@@ -372,27 +376,125 @@ exports.getExpensesLedger = async (req, res) => {
 };
 
 /**
+ * POST /api/accounts/expenses
+ * Super Admin adds an expense record (transaction handling)
+ */
+exports.createExpense = async (req, res) => {
+  try {
+    const { reason, recurrence, description, amount, date, category, paymentMethod, referenceId } = req.body;
+
+    if (!reason || !amount) {
+      return res.status(400).json({ success: false, message: 'Reason and amount are required.' });
+    }
+
+    const cleanAmount = parseFloat(amount);
+    if (isNaN(cleanAmount) || cleanAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount must be a positive number.' });
+    }
+
+    const expense = await Expense.create({
+      reason: reason.trim(),
+      recurrence: recurrence || 'one_time',
+      description: description ? description.trim() : reason.trim(),
+      amount: cleanAmount,
+      date: date ? new Date(date) : new Date(),
+      category: category || 'Miscellaneous',
+      paymentMethod: paymentMethod || 'Bank Transfer',
+      referenceId: referenceId ? referenceId.trim() : '',
+      createdBy: req.user._id,
+      createdByName: req.user.name
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Expense record successfully created.',
+      data: expense
+    });
+  } catch (error) {
+    console.error('[AccountController] createExpense error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * PATCH /api/accounts/expenses/:id
+ * Super Admin updates an expense
+ */
+exports.updateExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, recurrence, description, amount, date, category, paymentMethod, referenceId } = req.body;
+
+    const expense = await Expense.findById(id);
+    if (!expense) {
+      return res.status(404).json({ success: false, message: 'Expense record not found.' });
+    }
+
+    if (reason) expense.reason = reason.trim();
+    if (recurrence) expense.recurrence = recurrence;
+    if (description !== undefined) expense.description = description.trim();
+    if (amount !== undefined) expense.amount = parseFloat(amount);
+    if (date) expense.date = new Date(date);
+    if (category) expense.category = category;
+    if (paymentMethod) expense.paymentMethod = paymentMethod;
+    if (referenceId !== undefined) expense.referenceId = referenceId.trim();
+
+    await expense.save();
+
+    res.json({
+      success: true,
+      message: 'Expense record updated.',
+      data: expense
+    });
+  } catch (error) {
+    console.error('[AccountController] updateExpense error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * DELETE /api/accounts/expenses/:id
+ * Super Admin removes an expense record
+ */
+exports.deleteExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const expense = await Expense.findByIdAndDelete(id);
+    if (!expense) {
+      return res.status(404).json({ success: false, message: 'Expense record not found.' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Expense record deleted.'
+    });
+  } catch (error) {
+    console.error('[AccountController] deleteExpense error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * GET /api/accounts/report
- * Structured on-screen printable executive financial report
+ * Structured executive financial report
  */
 exports.getAccountsReport = async (req, res) => {
   try {
     const { preset = 'this_month', startDate, endDate } = req.query;
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
-    // Fetch summary
     const [salesAgg, expensesAgg, salesByCategory, expensesByCategory, recentSales, topExpenses] = await Promise.all([
-      Lead.aggregate([
-        { $match: { callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, totalSales: { $sum: { $ifNull: ['$dealValue', 0] } }, count: { $sum: 1 } } }
+      Sale.aggregate([
+        { $match: { closedAt: { $gte: start, $lte: end } } },
+        { $group: { _id: null, totalSales: { $sum: '$totalAmount' }, count: { $sum: 1 } } }
       ]),
       Expense.aggregate([
         { $match: { date: { $gte: start, $lte: end } } },
         { $group: { _id: null, totalExpenses: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]),
-      Lead.aggregate([
-        { $match: { callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: '$category', amount: { $sum: { $ifNull: ['$dealValue', 0] } }, count: { $sum: 1 } } },
+      Sale.aggregate([
+        { $match: { closedAt: { $gte: start, $lte: end } } },
+        { $group: { _id: { $ifNull: ['$customer.category', 'General'] }, amount: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } }
       ]),
       Expense.aggregate([
@@ -400,9 +502,8 @@ exports.getAccountsReport = async (req, res) => {
         { $group: { _id: '$category', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
         { $sort: { amount: -1 } }
       ]),
-      Lead.find({ callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } })
-        .select('businessName category area dealValue interestedProducts extractedByName updatedAt')
-        .sort({ updatedAt: -1 })
+      Sale.find({ closedAt: { $gte: start, $lte: end } })
+        .sort({ closedAt: -1 })
         .limit(20)
         .lean(),
       Expense.find({ date: { $gte: start, $lte: end } })
@@ -440,7 +541,16 @@ exports.getAccountsReport = async (req, res) => {
           expensesByCategory: expensesByCategory.map(e => ({ category: e._id, amount: e.amount, count: e.count }))
         },
         itemized: {
-          recentSales,
+          recentSales: recentSales.map(s => ({
+            businessName: s.customer?.businessName,
+            category: s.customer?.category,
+            area: s.customer?.area,
+            dealValue: s.totalAmount,
+            interestedProducts: s.products,
+            extractedByName: s.leadGeneratedByName,
+            closedByName: s.closedByName,
+            updatedAt: s.closedAt
+          })),
           topExpenses
         }
       }
@@ -460,18 +570,12 @@ exports.exportAccountsExcel = async (req, res) => {
     const { preset = 'this_month', startDate, endDate } = req.query;
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
-    // Fetch full dataset for the period
     const [sales, expenses, salesAgg, expensesAgg, expByCat] = await Promise.all([
-      Lead.find({ callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } })
-        .select('businessName category area dealValue interestedProducts extractedByName updatedAt')
-        .sort({ updatedAt: -1 })
-        .lean(),
-      Expense.find({ date: { $gte: start, $lte: end } })
-        .sort({ date: -1 })
-        .lean(),
-      Lead.aggregate([
-        { $match: { callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$dealValue', 0] } } } }
+      Sale.find({ closedAt: { $gte: start, $lte: end } }).sort({ closedAt: -1 }).lean(),
+      Expense.find({ date: { $gte: start, $lte: end } }).sort({ date: -1 }).lean(),
+      Sale.aggregate([
+        { $match: { closedAt: { $gte: start, $lte: end } } },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ]),
       Expense.aggregate([
         { $match: { date: { $gte: start, $lte: end } } },
@@ -490,13 +594,14 @@ exports.exportAccountsExcel = async (req, res) => {
     const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(1) : '0.0';
 
     const formattedSales = sales.map(s => ({
-      date: s.updatedAt,
-      businessName: s.businessName,
-      category: s.category,
-      area: s.area,
-      extractedByName: s.extractedByName,
-      interestedProducts: s.interestedProducts || [],
-      dealValue: s.dealValue || 0
+      date: s.closedAt,
+      businessName: s.customer?.businessName || 'Client',
+      category: s.customer?.category || 'General',
+      area: s.customer?.area || 'Lahore',
+      extractedByName: s.leadGeneratedByName || 'Sales Agent',
+      closedByName: s.closedByName || 'Super Admin',
+      interestedProducts: s.products || [],
+      dealValue: s.totalAmount || 0
     }));
 
     await accountReportService.generateExcelWorkbook({
@@ -531,16 +636,11 @@ exports.exportAccountsPdf = async (req, res) => {
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
     const [sales, expenses, salesAgg, expensesAgg, expByCat] = await Promise.all([
-      Lead.find({ callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } })
-        .select('businessName category area dealValue interestedProducts extractedByName updatedAt')
-        .sort({ updatedAt: -1 })
-        .lean(),
-      Expense.find({ date: { $gte: start, $lte: end } })
-        .sort({ date: -1 })
-        .lean(),
-      Lead.aggregate([
-        { $match: { callStatus: 'Lead / Sale', updatedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$dealValue', 0] } } } }
+      Sale.find({ closedAt: { $gte: start, $lte: end } }).sort({ closedAt: -1 }).lean(),
+      Expense.find({ date: { $gte: start, $lte: end } }).sort({ date: -1 }).lean(),
+      Sale.aggregate([
+        { $match: { closedAt: { $gte: start, $lte: end } } },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ]),
       Expense.aggregate([
         { $match: { date: { $gte: start, $lte: end } } },
@@ -559,12 +659,12 @@ exports.exportAccountsPdf = async (req, res) => {
     const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(1) : '0.0';
 
     const formattedSales = sales.map(s => ({
-      date: s.updatedAt,
-      businessName: s.businessName,
-      category: s.category,
-      area: s.area,
-      extractedByName: s.extractedByName,
-      dealValue: s.dealValue || 0
+      date: s.closedAt,
+      businessName: s.customer?.businessName || 'Client',
+      category: s.customer?.category || 'General',
+      area: s.customer?.area || 'Lahore',
+      extractedByName: s.leadGeneratedByName || 'Sales Agent',
+      dealValue: s.totalAmount || 0
     }));
 
     await accountReportService.generatePdfReport({

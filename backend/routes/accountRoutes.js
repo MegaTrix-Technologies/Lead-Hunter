@@ -9,9 +9,12 @@ router.use(authenticate, requireSuperAdmin);
 // Accounts Overview & Financial Aggregation
 router.get('/summary', accountController.getAccountsSummary);
 
-// Detailed Data Views (Read-Only)
+// Detailed Data Views & Expense CRUD
 router.get('/sales', accountController.getSalesLedger);
 router.get('/expenses', accountController.getExpensesLedger);
+router.post('/expenses', accountController.createExpense);
+router.patch('/expenses/:id', accountController.updateExpense);
+router.delete('/expenses/:id', accountController.deleteExpense);
 
 // Structured Financial Report
 router.get('/report', accountController.getAccountsReport);

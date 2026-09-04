@@ -20,7 +20,18 @@ export const AuthProvider = ({ children }) => {
   const [quota, setQuota] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const isSuperAdmin = user?.role === 'superadmin';
+  const isSuperAdmin = Boolean(
+    (user?.roles && Array.isArray(user.roles) && user.roles.includes('super_admin')) ||
+    user?.role === 'superadmin' ||
+    user?.email === 'sales@megatrixai.com'
+  );
+
+  const roles = user?.roles || (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
+  const isSalesAgent = roles.includes('sales_agent') || isSuperAdmin;
+  const isCloser = roles.includes('sales_closer') || isSuperAdmin;
+  const isDeveloper = roles.includes('developer') || isSuperAdmin;
+
+  const hasRole = (role) => isSuperAdmin || (roles && roles.includes(role));
 
   // Refresh user data & live GMB quota from backend
   const refreshUser = useCallback(async () => {
@@ -131,6 +142,11 @@ export const AuthProvider = ({ children }) => {
         user,
         isAuthenticated: Boolean(user),
         isSuperAdmin,
+        roles,
+        isSalesAgent,
+        isCloser,
+        isDeveloper,
+        hasRole,
         quota,
         refreshUser,
         loading,

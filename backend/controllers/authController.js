@@ -25,10 +25,15 @@ exports.seedSuperAdmin = async () => {
         email: adminEmail,
         password: 'Orangeman235!',
         role: 'superadmin',
+        roles: ['super_admin'],
+        commissionRates: { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         status: 'active',
         dailyGmbLimit: 999999
       });
       console.log('✔ Default Super Admin initialized.');
+    } else if (!admin.roles || admin.roles.length === 0) {
+      admin.roles = ['super_admin'];
+      await admin.save();
     }
 
     // Ensure ghost/demo agent accounts are never recreated; only super admin creates agents
@@ -105,7 +110,7 @@ exports.login = async (req, res) => {
     );
 
     // Compute today's usage & quota
-    const isSuperAdmin = user.role === 'superadmin';
+    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
     let usedToday = 0;
     if (!isSuperAdmin) {
       usedToday = await Lead.countDocuments({
@@ -116,6 +121,7 @@ exports.login = async (req, res) => {
 
     const dailyLimit = user.dailyGmbLimit || 150;
     const remainingToday = isSuperAdmin ? 999999 : Math.max(0, dailyLimit - usedToday);
+    const userRoles = user.roles && user.roles.length > 0 ? user.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
 
     return res.json({
       success: true,
@@ -126,6 +132,8 @@ exports.login = async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        roles: userRoles,
+        commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         dailyGmbLimit: user.dailyGmbLimit,
         loginTime: new Date().toISOString()
       },
@@ -149,7 +157,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = req.user;
-    const isSuperAdmin = user.role === 'superadmin';
+    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
     
     let usedToday = 0;
     if (!isSuperAdmin) {
@@ -161,6 +169,7 @@ exports.getMe = async (req, res) => {
 
     const dailyLimit = user.dailyGmbLimit || 150;
     const remainingToday = isSuperAdmin ? 999999 : Math.max(0, dailyLimit - usedToday);
+    const userRoles = user.roles && user.roles.length > 0 ? user.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
 
     res.json({
       success: true,
@@ -170,6 +179,8 @@ exports.getMe = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: userRoles,
+        commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit
       },

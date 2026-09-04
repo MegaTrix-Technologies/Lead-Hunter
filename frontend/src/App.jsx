@@ -14,12 +14,16 @@ import AnalyticsDashboard from './components/analytics/AnalyticsDashboard';
 import SettingsView from './components/settings/SettingsView';
 import ProductCatalogView from './components/products/ProductCatalogView';
 import AccountsManagerView from './components/accounts/AccountsManagerView';
+import DashboardView from './components/dashboard/DashboardView';
+import CloserQueueView from './components/closer/CloserQueueView';
+import ProjectsView from './components/projects/ProjectsView';
+import SalesListView from './components/sales/SalesListView';
 import EmailCampaignModal from './components/email/EmailCampaignModal';
 import DeliveryReportModal from './components/email/DeliveryReportModal';
 import AppendSearchModal from './components/dataset/AppendSearchModal';
 
 function App() {
-  const { isAuthenticated, isSuperAdmin } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isSalesAgent, isCloser, isDeveloper } = useAuth();
   const { activeView, setActiveView, setActiveDatasetId, fetchLeads, appendModalDataset, setAppendModalDataset } = useLead();
   const location = useLocation();
   const navigate = useNavigate();
@@ -31,23 +35,24 @@ function App() {
         navigate('/login', { replace: true });
       }
     } else {
-      // If agent attempts to navigate to restricted views directly, bounce to Gmb-Extractor
-      const isRestrictedPath = location.pathname.toLowerCase() === '/email-proposals' ||
-                               location.pathname.toLowerCase() === '/accounts-manager' ||
-                               location.pathname.toLowerCase() === '/accounts';
-      const isRestrictedView = activeView === 'email' || activeView === 'accounts';
+      // Role-based restrictions check
+      const pathLower = location.pathname.toLowerCase();
+      const isRestrictedAccounts = (pathLower === '/accounts-manager' || pathLower === '/accounts' || activeView === 'accounts') && !isSuperAdmin;
+      const isRestrictedEmail = (pathLower === '/email-proposals' || activeView === 'email') && !isSuperAdmin;
+      const isRestrictedCloser = (pathLower === '/closer-queue' || pathLower === '/closer' || activeView === 'closer') && (!isCloser && !isSuperAdmin);
+      const isRestrictedProjects = (pathLower === '/projects' || pathLower === '/project-delivery' || activeView === 'projects') && (!isDeveloper && !isSuperAdmin);
 
-      if (!isSuperAdmin && (isRestrictedPath || isRestrictedView)) {
-        setActiveView('scraper');
-        navigate('/Gmb-Extractor', { replace: true });
+      if (isRestrictedAccounts || isRestrictedEmail || isRestrictedCloser || isRestrictedProjects) {
+        setActiveView('dashboard');
+        navigate('/Dashboard', { replace: true });
         return;
       }
 
       if (location.pathname.toLowerCase() === '/login' || location.pathname === '/') {
-        navigate('/Gmb-Extractor', { replace: true });
+        navigate('/Dashboard', { replace: true });
       }
     }
-  }, [isAuthenticated, isSuperAdmin, location.pathname, activeView, navigate, setActiveView]);
+  }, [isAuthenticated, isSuperAdmin, isSalesAgent, isCloser, isDeveloper, location.pathname, activeView, navigate, setActiveView]);
 
   const handleViewLeads = (dataset) => {
     setActiveDatasetId(dataset._id);
@@ -68,6 +73,22 @@ function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {activeView === 'dashboard' && (
+          <DashboardView />
+        )}
+
+        {activeView === 'closer' && (
+          <CloserQueueView />
+        )}
+
+        {activeView === 'sales' && (
+          <SalesListView />
+        )}
+
+        {activeView === 'projects' && (
+          <ProjectsView />
+        )}
+
         {activeView === 'scraper' && (
           <div className="space-y-6">
             <ScraperControls />

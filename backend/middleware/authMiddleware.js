@@ -51,10 +51,19 @@ const authenticate = async (req, res, next) => {
 };
 
 /**
+ * Check if user has superadmin role
+ */
+const isUserSuperAdmin = (user) => {
+  if (!user) return false;
+  if (user.roles && Array.isArray(user.roles) && user.roles.includes('super_admin')) return true;
+  return user.role === 'superadmin';
+};
+
+/**
  * Enforce Super Administrator privilege
  */
 const requireSuperAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'superadmin') {
+  if (!req.user || !isUserSuperAdmin(req.user)) {
     return res.status(403).json({
       success: false,
       message: 'Access restricted: Super Administrator privileges required.'
@@ -63,8 +72,41 @@ const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
+/**
+ * Enforce role requirement. Super Admin always has bypass access.
+ * Usage: requireRoles('sales_closer', 'sales_agent')
+ */
+const requireRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.'
+      });
+    }
+
+    if (isUserSuperAdmin(req.user)) {
+      return next();
+    }
+
+    const userRoles = req.user.roles || (req.user.role === 'superadmin' ? ['super_admin'] : ['sales_agent']);
+    const hasRole = allowedRoles.some(r => userRoles.includes(r));
+
+    if (!hasRole) {
+      return res.status(403).json({
+        success: false,
+        message: `Access restricted: Requires one of [${allowedRoles.join(', ')}] role(s).`
+      });
+    }
+
+    next();
+  };
+};
+
 module.exports = {
   authenticate,
   requireSuperAdmin,
+  requireRoles,
+  isUserSuperAdmin,
   JWT_SECRET
 };

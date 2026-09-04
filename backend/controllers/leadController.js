@@ -198,20 +198,16 @@ exports.updateCallStatus = async (req, res) => {
     const { id } = req.params;
     const { callStatus, note, followUpDate, interestedProducts } = req.body;
 
-    const validStatuses = ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
+    const validStatuses = [
+      'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 
+      'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale',
+      'Lead', 'processing', 'denied', 'sale'
+    ];
     if (callStatus && !validStatuses.includes(callStatus)) {
       return res.status(400).json({ success: false, message: 'Invalid call status provided.' });
     }
 
-    // Compulsory check: Lead / Sale requires at least 1 interested product
-    if (callStatus === 'Lead / Sale') {
-      if (!Array.isArray(interestedProducts) || interestedProducts.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Selection Compulsory: You must select at least one product from the catalog to mark a Lead / Sale.'
-        });
-      }
-    }
+    const { additionalInfo } = req.body;
 
     const updateDoc = {
       lastCalledAt: new Date()
@@ -219,6 +215,10 @@ exports.updateCallStatus = async (req, res) => {
 
     if (callStatus) {
       updateDoc.callStatus = callStatus;
+    }
+
+    if (additionalInfo !== undefined) {
+      updateDoc.additionalInfo = additionalInfo.trim();
     }
 
     if (followUpDate) {
@@ -307,7 +307,7 @@ exports.addCallNote = async (req, res) => {
  */
 exports.createLead = async (req, res) => {
   try {
-    const { businessName, phoneNumber, email, website, address, area, category, rating, reviewCount } = req.body;
+    const { businessName, phoneNumber, email, website, address, area, category, rating, reviewCount, additionalInfo } = req.body;
     
     if (!businessName || !area || !category) {
       return res.status(400).json({ success: false, message: 'Business Name, Area, and Category are required.' });
@@ -327,8 +327,11 @@ exports.createLead = async (req, res) => {
       rating: parseFloat(rating) || 0,
       reviewCount: parseInt(reviewCount, 10) || 0,
       callStatus: 'Uncontacted',
+      additionalInfo: additionalInfo ? additionalInfo.trim() : '',
       extractedBy: user ? user._id : null,
-      extractedByName: user ? user.name : 'Super Admin'
+      extractedByName: user ? user.name : 'Super Admin',
+      generatedBy: user ? user._id : null,
+      generatedByName: user ? user.name : 'Super Admin'
     });
 
     res.status(201).json({ success: true, data: newLead });

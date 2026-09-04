@@ -22,9 +22,10 @@ exports.getUsers = async (req, res) => {
           Lead.countDocuments({ extractedBy: u._id })
         ]);
 
-        const isSuperAdmin = u.role === 'superadmin';
+        const isSuperAdmin = u.roles ? u.roles.includes('super_admin') : u.role === 'superadmin';
         const limit = u.dailyGmbLimit || 150;
         const remainingToday = isSuperAdmin ? 999999 : Math.max(0, limit - usedToday);
+        const userRoles = u.roles && u.roles.length > 0 ? u.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
 
         return {
           id: u._id,
@@ -32,6 +33,8 @@ exports.getUsers = async (req, res) => {
           name: u.name,
           email: u.email,
           role: u.role,
+          roles: userRoles,
+          commissionRates: u.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
           status: u.status,
           dailyGmbLimit: limit,
           usedToday,
@@ -53,11 +56,11 @@ exports.getUsers = async (req, res) => {
 };
 
 /**
- * Super Admin: Create new agent profile
+ * Super Admin: Create new user profile with roles & commission rates
  */
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, dailyGmbLimit } = req.body;
+    const { name, email, password, dailyGmbLimit, roles, commissionRates } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -76,11 +79,20 @@ exports.createUser = async (req, res) => {
     }
 
     const limit = parseInt(dailyGmbLimit, 10);
+    const assignedRoles = Array.isArray(roles) && roles.length > 0 ? roles : ['sales_agent'];
+    const rates = {
+      leadGenPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.leadGenPercent) || 0)),
+      closerPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.closerPercent) || 0)),
+      developerPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.developerPercent) || 0))
+    };
+
     const user = await User.create({
       name: name.trim(),
       email: cleanEmail,
       password,
-      role: 'agent',
+      role: assignedRoles.includes('super_admin') ? 'superadmin' : 'agent',
+      roles: assignedRoles,
+      commissionRates: rates,
       status: 'active',
       dailyGmbLimit: isNaN(limit) || limit < 1 ? 150 : limit,
       createdBy: req.user._id
@@ -88,13 +100,15 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `Agent profile "${user.name}" created successfully.`,
+      message: `User profile "${user.name}" created successfully.`,
       data: {
         id: user._id,
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: user.roles,
+        commissionRates: user.commissionRates,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit,
         createdAt: user.createdAt
@@ -107,12 +121,12 @@ exports.createUser = async (req, res) => {
 };
 
 /**
- * Super Admin: Update agent profile (Limit, status [block/unblock], name, reset password)
+ * Super Admin: Update user profile (roles, commission rates, limit, status [block/unblock], name, reset password)
  */
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, dailyGmbLimit, status, password } = req.body;
+    const { name, dailyGmbLimit, status, password, roles, commissionRates } = req.body;
 
     const user = await User.findById(id);
     if (!user) {
@@ -120,7 +134,8 @@ exports.updateUser = async (req, res) => {
     }
 
     // Protect Super Admin from being blocked or downgraded
-    if (user.role === 'superadmin' && status === 'blocked') {
+    const isTargetSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
+    if (isTargetSuperAdmin && status === 'blocked') {
       return res.status(400).json({
         success: false,
         message: 'The Super Administrator account cannot be blocked.'
@@ -140,6 +155,20 @@ exports.updateUser = async (req, res) => {
     if (password && password.trim().length >= 6) {
       user.password = password.trim();
     }
+    if (Array.isArray(roles) && roles.length > 0) {
+      // Don't remove super_admin from root super admin
+      if (user.email === 'sales@megatrixai.com' && !roles.includes('super_admin')) {
+        roles.push('super_admin');
+      }
+      user.roles = roles;
+    }
+    if (commissionRates && typeof commissionRates === 'object') {
+      user.commissionRates = {
+        leadGenPercent: commissionRates.leadGenPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.leadGenPercent) || 0)) : (user.commissionRates?.leadGenPercent || 0),
+        closerPercent: commissionRates.closerPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.closerPercent) || 0)) : (user.commissionRates?.closerPercent || 0),
+        developerPercent: commissionRates.developerPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.developerPercent) || 0)) : (user.commissionRates?.developerPercent || 0)
+      };
+    }
 
     await user.save();
 
@@ -152,6 +181,8 @@ exports.updateUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: user.roles,
+        commissionRates: user.commissionRates,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit
       }

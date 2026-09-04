@@ -61,6 +61,7 @@ const CallingWorkstation = () => {
 
   const [queueSearch, setQueueSearch] = useState('');
   const [currentNote, setCurrentNote] = useState('');
+  const [additionalInfo, setAdditionalInfo] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [saving, setSaving] = useState(false);
@@ -116,9 +117,9 @@ const CallingWorkstation = () => {
       color: 'border-yellow-600/80 bg-yellow-950/30 text-yellow-300 hover:bg-yellow-900/40' 
     },
     { 
-      id: 'Lead / Sale', 
-      label: 'Lead / Sale', 
-      desc: 'Converted / Active Deal Won', 
+      id: 'Lead', 
+      label: 'Lead', 
+      desc: 'Qualified Lead / Transferred to Closer Pool', 
       color: 'border-emerald-500/80 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 font-bold border-glow-green' 
     }
   ];
@@ -160,6 +161,7 @@ const CallingWorkstation = () => {
       setSelectedStatus(activeLead.callStatus || 'Uncontacted');
       setFollowUpDate(activeLead.followUpDate ? new Date(activeLead.followUpDate).toISOString().slice(0, 16) : '');
       setCurrentNote('');
+      setAdditionalInfo(activeLead.additionalInfo || '');
       setProductValidationError(false);
 
       if (activeLead.interestedProducts && activeLead.interestedProducts.length > 0) {
@@ -247,23 +249,12 @@ const CallingWorkstation = () => {
   const handleSaveCurrent = async (advance = false) => {
     if (!activeLead) return;
 
-    // Compulsory check for Lead / Sale
-    if (selectedStatus === 'Lead / Sale' && (!selectedProducts || selectedProducts.length === 0)) {
-      setProductValidationError(true);
-      addToast({
-        title: 'Product Selection Compulsory',
-        message: 'Please select at least one product from the catalog before saving a "Lead / Sale".',
-        type: 'error',
-        duration: 4500
-      });
-      return;
-    }
-
     setSaving(true);
 
     try {
       const noteToSave = currentNote.trim();
-      const productsToAttach = (selectedStatus === 'Lead / Sale' || selectedStatus === 'Follow Up') 
+      const isLeadStatus = selectedStatus === 'Lead' || selectedStatus === 'Lead / Sale';
+      const productsToAttach = (isLeadStatus || selectedStatus === 'Follow Up') 
         ? selectedProducts 
         : [];
 
@@ -272,7 +263,8 @@ const CallingWorkstation = () => {
         selectedStatus, 
         noteToSave, 
         selectedStatus === 'Follow Up' ? followUpDate : null,
-        productsToAttach
+        productsToAttach,
+        additionalInfo.trim()
       );
 
       setCurrentNote('');
@@ -804,44 +796,27 @@ const CallingWorkstation = () => {
               </div>
             )}
 
-            {/* ─── PRODUCT CATALOG & DEAL SELECTION (FOLLOW UP OR LEAD / SALE) ─── */}
-            {(selectedStatus === 'Follow Up' || selectedStatus === 'Lead / Sale') && (
+            {/* ─── PRODUCT CATALOG & DEAL SELECTION (OPTIONAL AT LEAD STAGE) ─── */}
+            {(selectedStatus === 'Follow Up' || selectedStatus === 'Lead' || selectedStatus === 'Lead / Sale') && (
               <div className={`p-4 border space-y-4 animate-in fade-in duration-200 ${
-                productValidationError
-                  ? 'border-red-600 bg-red-950/20 ring-1 ring-red-500/50'
-                  : selectedStatus === 'Lead / Sale'
-                    ? 'border-emerald-600/70 bg-[#06110A]'
-                    : 'border-yellow-700/60 bg-[#0E0C06]'
+                (selectedStatus === 'Lead' || selectedStatus === 'Lead / Sale')
+                  ? 'border-emerald-600/70 bg-[#06110A]'
+                  : 'border-yellow-700/60 bg-[#0E0C06]'
               }`}>
                 {/* Box Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2">
-                    <Package className={`w-4 h-4 ${selectedStatus === 'Lead / Sale' ? 'text-emerald-400' : 'text-yellow-400'}`} />
+                    <Package className={`w-4 h-4 ${(selectedStatus === 'Lead' || selectedStatus === 'Lead / Sale') ? 'text-emerald-400' : 'text-yellow-400'}`} />
                     <span className="text-xs font-bold text-white uppercase tracking-wider">
                       Interested Offerings &amp; Deal Configuration
                     </span>
                   </div>
                   <div>
-                    {selectedStatus === 'Lead / Sale' ? (
-                      <span className="text-[10px] px-2 py-0.5 border border-emerald-500/80 bg-emerald-950 text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                        Compulsory — Select At Least 1 Offering
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 border border-yellow-600/70 bg-yellow-950 text-yellow-300 font-bold uppercase tracking-wider">
-                        Optional — Select Offerings Discussed
-                      </span>
-                    )}
+                    <span className="text-[10px] px-2 py-0.5 border border-emerald-500/80 bg-emerald-950 text-emerald-300 font-bold uppercase tracking-wider">
+                      Optional at Lead Stage (Finalized by Closer)
+                    </span>
                   </div>
                 </div>
-
-                {/* Validation Error Banner */}
-                {productValidationError && (
-                  <div className="p-2.5 bg-red-900/40 border border-red-700 text-red-200 text-xs flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-                    <span>Action Required: You must select at least 1 product from the catalog below before saving a "Lead / Sale".</span>
-                  </div>
-                )}
 
                 {/* Products Grid */}
                 {loadingProducts ? (
@@ -1012,6 +987,19 @@ const CallingWorkstation = () => {
                 placeholder="Log call conversation details, customer objections, or follow-up instructions..."
                 className="w-full p-3 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-700 focus:outline-none focus:border-white resize-none"
               />
+
+              <div className="pt-2">
+                <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                  Additional Info &amp; Closer Handoff Notes:
+                </label>
+                <input
+                  type="text"
+                  value={additionalInfo}
+                  onChange={(e) => setAdditionalInfo(e.target.value)}
+                  placeholder="e.g. Budget 45k, wants modern dental website with booking system, prefers morning calls..."
+                  className="w-full px-3 py-2 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-700 focus:outline-none focus:border-white"
+                />
+              </div>
             </div>
 
             {/* Historical Notes Timeline */}

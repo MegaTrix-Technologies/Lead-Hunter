@@ -64,9 +64,18 @@ const LeadSchema = new mongoose.Schema({
   // Outbound Calling Engine State (includes Unreachable as retryable status)
   callStatus: {
     type: String,
-    enum: ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'],
+    enum: [
+      'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 
+      'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale',
+      'Lead', 'processing', 'denied', 'sale'
+    ],
     default: 'Uncontacted',
     index: true
+  },
+  additionalInfo: {
+    type: String,
+    default: '',
+    trim: true
   },
   callNotes: [{
     note: { type: String, required: true },
@@ -174,9 +183,30 @@ const LeadSchema = new mongoose.Schema({
   extractedByName: {
     type: String,
     default: 'Super Admin'
+  },
+  generatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  generatedByName: {
+    type: String,
+    default: ''
   }
 }, { 
   timestamps: true 
+});
+
+LeadSchema.pre('save', function (next) {
+  if (this.extractedBy && !this.generatedBy) {
+    this.generatedBy = this.extractedBy;
+    this.generatedByName = this.extractedByName;
+  } else if (this.generatedBy && !this.extractedBy) {
+    this.extractedBy = this.generatedBy;
+    this.extractedByName = this.generatedByName;
+  }
+  next();
 });
 
 // Compound indexes for high-speed deduplication and exclusion queries
@@ -185,5 +215,6 @@ LeadSchema.index({ area: 1, category: 1 });
 LeadSchema.index({ businessName: 1, area: 1 });
 LeadSchema.index({ datasetId: 1, callStatus: 1 });
 LeadSchema.index({ extractedBy: 1, callStatus: 1 });
+LeadSchema.index({ generatedBy: 1, callStatus: 1 });
 
 module.exports = mongoose.model('Lead', LeadSchema);

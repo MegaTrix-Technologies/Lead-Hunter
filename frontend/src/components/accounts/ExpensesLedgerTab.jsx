@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AccountService } from '../../services/api';
-import { Search, Filter, ChevronLeft, ChevronRight, Receipt, CreditCard, Tag, FileText } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Receipt, CreditCard, Tag, FileText, Trash2 } from 'lucide-react';
 
 const formatPKR = (num) => `PKR ${(Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -14,7 +14,13 @@ const categoryColors = {
   'Miscellaneous': 'text-zinc-400 bg-zinc-900 border-zinc-700'
 };
 
-const ExpensesLedgerTab = ({ periodParams }) => {
+const recurrenceLabels = {
+  one_time: 'One-Time',
+  monthly: 'Monthly',
+  yearly: 'Yearly'
+};
+
+const ExpensesLedgerTab = ({ periodParams, refreshSummary }) => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
@@ -39,6 +45,19 @@ const ExpensesLedgerTab = ({ periodParams }) => {
       console.error('Error loading expenses ledger:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm('Are you sure you want to permanently delete this expense?')) return;
+    try {
+      const res = await AccountService.deleteExpense(id);
+      if (res.data?.success) {
+        fetchExpenses(pagination.page);
+        if (refreshSummary) refreshSummary();
+      }
+    } catch (err) {
+      console.error('Error deleting expense:', err);
     }
   };
 
@@ -108,11 +127,12 @@ const ExpensesLedgerTab = ({ periodParams }) => {
               <thead className="bg-[#050505] border-b border-[#1E1E1E] text-zinc-400">
                 <tr>
                   <th className="py-3 px-4 font-semibold">Date</th>
+                  <th className="py-3 px-4 font-semibold">Reason / Vendor</th>
+                  <th className="py-3 px-4 font-semibold">Recurrence</th>
                   <th className="py-3 px-4 font-semibold">Category</th>
-                  <th className="py-3 px-4 font-semibold">Description / Purpose</th>
-                  <th className="py-3 px-4 font-semibold">Payment Method</th>
-                  <th className="py-3 px-4 font-semibold">Reference #</th>
+                  <th className="py-3 px-4 font-semibold">Description</th>
                   <th className="py-3 px-4 font-semibold text-right">Amount</th>
+                  <th className="py-3 px-4 font-semibold text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#141414]">
@@ -121,28 +141,33 @@ const ExpensesLedgerTab = ({ periodParams }) => {
                     <td className="py-3.5 px-4 text-zinc-400 whitespace-nowrap">
                       {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
                     </td>
+                    <td className="py-3.5 px-4 font-bold text-white whitespace-nowrap">
+                      {item.reason || item.description}
+                    </td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 text-[10px] uppercase font-bold">
+                        {recurrenceLabels[item.recurrence] || 'One-Time'}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <span className={`px-2 py-0.5 border text-[11px] font-medium ${categoryColors[item.category] || 'text-zinc-300 bg-zinc-900 border-zinc-700'}`}>
                         {item.category}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-white font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="truncate max-w-md">{item.description}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-400 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <CreditCard className="w-3 h-3 text-zinc-500 shrink-0" />
-                        <span>{item.paymentMethod || 'Bank Transfer'}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-500 text-[11px] whitespace-nowrap">
-                      {item.referenceId || 'N/A'}
+                    <td className="py-3.5 px-4 text-zinc-400">
+                      <span className="truncate max-w-xs block">{item.description}</span>
                     </td>
                     <td className="py-3.5 px-4 text-right font-bold text-rose-400 text-sm whitespace-nowrap">
                       {formatPKR(item.amount)}
+                    </td>
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => handleDeleteExpense(item._id)}
+                        className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-900 transition-colors cursor-pointer"
+                        title="Delete expense"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

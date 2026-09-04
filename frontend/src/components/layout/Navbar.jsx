@@ -14,7 +14,11 @@ import {
   LogOut,
   ChevronDown,
   Package,
-  Landmark
+  Landmark,
+  LayoutDashboard,
+  UserCheck,
+  Briefcase,
+  DollarSign
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -27,33 +31,74 @@ const Navbar = () => {
     callingQueue 
   } = useLead();
 
-  const { user, logout, isSuperAdmin } = useAuth();
+  const { user, logout, isSuperAdmin, isSalesAgent, isCloser, isDeveloper } = useAuth();
 
   const allNavItems = [
-    { id: 'scraper', label: 'GMB Extractor', icon: Compass, badge: null },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null, visible: true },
+    { 
+      id: 'closer', 
+      label: 'Closer Queue', 
+      icon: UserCheck, 
+      badge: null,
+      visible: isCloser 
+    },
+    { 
+      id: 'sales', 
+      label: 'Sales Ledger', 
+      icon: DollarSign, 
+      badge: null,
+      visible: isCloser || isSuperAdmin
+    },
+    { 
+      id: 'projects', 
+      label: 'Projects & Delivery', 
+      icon: Briefcase, 
+      badge: null,
+      visible: isDeveloper || isSuperAdmin 
+    },
+    { 
+      id: 'accounts', 
+      label: 'Accounts Manager', 
+      icon: Landmark, 
+      badge: null, 
+      visible: isSuperAdmin 
+    },
     { 
       id: 'workstation', 
       label: 'Cold Calling CRM', 
       icon: PhoneCall, 
       badge: callingQueue.length > 0 ? callingQueue.length : null,
-      badgeColor: 'bg-blue-600'
+      badgeColor: 'bg-blue-600',
+      visible: isSalesAgent || isSuperAdmin
     },
-    { id: 'products', label: 'Product Catalog', icon: Package, badge: null },
-    { id: 'accounts', label: 'Accounts Manager', icon: Landmark, badge: null, superAdminOnly: true },
-    { id: 'email', label: 'Email Proposals', icon: Mail, badge: null, superAdminOnly: true },
+    { 
+      id: 'scraper', 
+      label: 'GMB Extractor', 
+      icon: Compass, 
+      badge: null,
+      visible: isSalesAgent || isSuperAdmin
+    },
     { 
       id: 'crm', 
       label: 'Leads Database', 
       icon: Database, 
       badge: pagination.totalLeads > 0 ? pagination.totalLeads : null,
-      badgeColor: 'bg-zinc-800'
+      badgeColor: 'bg-zinc-800',
+      visible: isSalesAgent || isSuperAdmin
     },
-    { id: 'kanban', label: 'Sales Pipeline', icon: Kanban, badge: null },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3, badge: null },
-    { id: 'settings', label: 'Settings', icon: Settings, badge: null }
+    { 
+      id: 'kanban', 
+      label: 'Sales Pipeline', 
+      icon: Kanban, 
+      badge: null,
+      visible: isSalesAgent || isCloser || isSuperAdmin
+    },
+    { id: 'products', label: 'Product Catalog', icon: Package, badge: null, visible: true },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, badge: null, visible: true },
+    { id: 'settings', label: 'Settings', icon: Settings, badge: null, visible: true }
   ];
 
-  const navItems = allNavItems.filter(item => !item.superAdminOnly || isSuperAdmin);
+  const navItems = allNavItems.filter(item => item.visible !== false);
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#000000] border-b border-[#1E1E1E]">
@@ -64,7 +109,7 @@ const Navbar = () => {
           
           {/* Brand Logo - Standalone Without Any Box or Borders */}
           <div 
-            onClick={() => setActiveView('scraper')}
+            onClick={() => setActiveView('dashboard')}
             className="flex items-center gap-3 cursor-pointer select-none group py-1"
           >
             <img 

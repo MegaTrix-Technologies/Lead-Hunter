@@ -100,9 +100,36 @@ export const AccountService = {
   getSummary: (params) => api.get('/accounts/summary', { params }),
   getSales: (params) => api.get('/accounts/sales', { params }),
   getExpenses: (params) => api.get('/accounts/expenses', { params }),
+  createExpense: (data) => api.post('/accounts/expenses', data),
+  updateExpense: (id, data) => api.patch(`/accounts/expenses/${id}`, data),
+  deleteExpense: (id) => api.delete(`/accounts/expenses/${id}`),
   getReport: (params) => api.get('/accounts/report', { params }),
   exportExcel: (params) => api.get('/accounts/export-excel', { params, responseType: 'blob' }),
   exportPdf: (params) => api.get('/accounts/export-pdf', { params, responseType: 'blob' })
+};
+
+export const SaleService = {
+  getCloserQueue: (params) => api.get('/sales/closer-queue', { params }),
+  closeLead: (id, data) => api.post(`/sales/close-lead/${id}`, data),
+  getSales: (params) => api.get('/sales', { params }),
+  createManualSale: (data) => api.post('/sales/manual', data),
+  collectFinalPayment: (id, data) => api.patch(`/sales/${id}/collect-payment`, data)
+};
+
+export const ProjectService = {
+  getProjects: (params) => api.get('/projects', { params }),
+  assignDevelopers: (id, data) => api.patch(`/projects/${id}/assign`, data),
+  addDeliveryNote: (id, data) => api.post(`/projects/${id}/notes`, data),
+  completeProject: (id, data) => api.patch(`/projects/${id}/complete`, data)
+};
+
+export const CommissionService = {
+  getMyEarnings: () => api.get('/commissions/my-earnings'),
+  getAllEarnings: () => api.get('/commissions/all')
+};
+
+export const DashboardService = {
+  getDashboard: () => api.get('/dashboard')
 };
 
 export default api;

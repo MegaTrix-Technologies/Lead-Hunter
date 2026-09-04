@@ -7,9 +7,20 @@ const ExpenseSchema = new mongoose.Schema({
     default: Date.now,
     index: true
   },
-  category: {
+  reason: {
     type: String,
     required: true,
+    trim: true,
+    default: 'Operational Expense'
+  },
+  recurrence: {
+    type: String,
+    enum: ['one_time', 'monthly', 'yearly'],
+    default: 'one_time',
+    index: true
+  },
+  category: {
+    type: String,
     enum: [
       'Software & Infrastructure',
       'Marketing & Lead Gen',
@@ -19,6 +30,7 @@ const ExpenseSchema = new mongoose.Schema({
       'Legal & Compliance',
       'Miscellaneous'
     ],
+    default: 'Miscellaneous',
     index: true
   },
   amount: {
