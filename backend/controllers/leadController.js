@@ -1,4 +1,13 @@
 const Lead = require('../models/Lead');
+const Dataset = require('../models/Dataset');
+
+const isSuperAdminUser = (user) => {
+  if (!user) return false;
+  if (user.email === 'sales@megatrixai.com') return true;
+  if (user.role === 'superadmin') return true;
+  if (Array.isArray(user.roles) && user.roles.includes('super_admin')) return true;
+  return false;
+};
 
 /**
  * Get leads with server-side pagination (strictly 10 per page default) and multi-field filters
@@ -10,13 +19,16 @@ exports.getLeads = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const query = {};
+    const andConditions = [];
 
     // Filter by Dataset ID
     if (req.query.datasetId) {
-      query.$or = [
-        { datasetId: req.query.datasetId },
-        { datasetIds: req.query.datasetId }
-      ];
+      andConditions.push({
+        $or: [
+          { datasetId: req.query.datasetId },
+          { datasetIds: req.query.datasetId }
+        ]
+      });
     }
 
     // Filter by call status
@@ -50,18 +62,30 @@ exports.getLeads = async (req, res) => {
     // Search term (business name, phone, email, address)
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search, 'i');
-      query.$or = [
-        { businessName: searchRegex },
-        { phoneNumber: searchRegex },
-        { email: searchRegex },
-        { address: searchRegex }
-      ];
+      andConditions.push({
+        $or: [
+          { businessName: searchRegex },
+          { phoneNumber: searchRegex },
+          { email: searchRegex },
+          { address: searchRegex }
+        ]
+      });
     }
 
-    // Role-based scoping: Agents only see their extracted leads
+    // Role-based scoping: Non-superadmins only see their extracted or generated leads
     const user = req.user;
-    if (user && user.role === 'agent') {
-      query.extractedBy = user._id;
+    if (!isSuperAdminUser(user) && user) {
+      andConditions.push({
+        $or: [
+          { extractedBy: user._id },
+          { generatedBy: user._id },
+          { followUpBy: user._id }
+        ]
+      });
+    }
+
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
     }
 
     // Sort option
@@ -200,7 +224,7 @@ exports.updateCallStatus = async (req, res) => {
 
     const validStatuses = [
       'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 
-      'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale',
+      'Do Not Call', 'Shows Interest', 'Follow Up', 'Closer Follow Up', 'Lead / Sale',
       'Lead', 'processing', 'denied', 'sale'
     ];
     if (callStatus && !validStatuses.includes(callStatus)) {
@@ -223,6 +247,15 @@ exports.updateCallStatus = async (req, res) => {
           updateDoc.generatedByName = req.user.name;
         }
         updateDoc.disposedAt = new Date();
+      } else if (callStatus === 'Follow Up') {
+        updateDoc.callStatus = 'Follow Up';
+        updateDoc.followUpType = 'sales_agent';
+        if (req.user) {
+          updateDoc.followUpBy = req.user._id;
+          updateDoc.followUpByName = req.user.name;
+          updateDoc.generatedBy = req.user._id;
+          updateDoc.generatedByName = req.user.name;
+        }
       }
     }
 
@@ -312,20 +345,23 @@ exports.addCallNote = async (req, res) => {
 };
 
 /**
- * Create a new lead manually
+ * Create a new lead manually (Sales Agent + Sales Closer + Super Admin)
  */
 exports.createLead = async (req, res) => {
   try {
-    const { businessName, phoneNumber, email, website, address, area, category, rating, reviewCount, additionalInfo } = req.body;
-    
-    if (!businessName || !area || !category) {
-      return res.status(400).json({ success: false, message: 'Business Name, Area, and Category are required.' });
+    const user = req.user;
+    const userRoles = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
+    const isSuperAdmin = isSuperAdminUser(user);
+    const isAllowedRole = isSuperAdmin || userRoles.includes('sales_agent') || userRoles.includes('sales_closer');
+
+    if (!isAllowedRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only Sales Agents, Sales Closers, and Super Admins can add leads manually.'
+      });
     }
 
-    const placeId = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const user = req.user;
-    const newLead = await Lead.create({
-      placeId,
+    const {
       businessName,
       phoneNumber,
       email,
@@ -333,18 +369,111 @@ exports.createLead = async (req, res) => {
       address,
       area,
       category,
+      rating,
+      reviewCount,
+      additionalInfo,
+      callStatus,
+      followUpDate,
+      closerFollowUpDate,
+      datasetId,
+      notes
+    } = req.body;
+    
+    if (!businessName || !area || !category) {
+      return res.status(400).json({ success: false, message: 'Business Name, Area, and Category are required.' });
+    }
+
+    const placeId = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    
+    // Status resolution
+    const validStatuses = [
+      'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 
+      'Do Not Call', 'Shows Interest', 'Follow Up', 'Closer Follow Up', 'Lead / Sale',
+      'Lead', 'processing', 'denied', 'sale'
+    ];
+    const initialStatus = validStatuses.includes(callStatus) ? callStatus : 'Uncontacted';
+
+    // Follow-up attributes
+    let followUpDateVal = null;
+    let followUpTypeVal = null;
+    let followUpByVal = null;
+    let followUpByNameVal = '';
+    let closerIdVal = null;
+    let closerNameVal = '';
+    let closerFollowUpDateVal = null;
+
+    if (initialStatus === 'Follow Up') {
+      followUpDateVal = followUpDate ? new Date(followUpDate) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      followUpTypeVal = 'sales_agent';
+      followUpByVal = user ? user._id : null;
+      followUpByNameVal = user ? user.name : 'Sales Agent';
+    } else if (initialStatus === 'Closer Follow Up') {
+      closerFollowUpDateVal = closerFollowUpDate ? new Date(closerFollowUpDate) : (followUpDate ? new Date(followUpDate) : new Date(Date.now() + 24 * 60 * 60 * 1000));
+      followUpTypeVal = 'sales_closer';
+      closerIdVal = user ? user._id : null;
+      closerNameVal = user ? user.name : 'Sales Closer';
+    } else if (initialStatus === 'Lead' && userRoles.includes('sales_closer')) {
+      closerIdVal = user._id;
+      closerNameVal = user.name;
+    }
+
+    // Call notes
+    const initialNotes = [];
+    const noteText = notes || additionalInfo;
+    if (noteText && noteText.trim()) {
+      initialNotes.push({
+        note: noteText.trim(),
+        author: user ? user.name : 'MegaTrix Agent',
+        timestamp: new Date()
+      });
+    }
+
+    const leadData = {
+      placeId,
+      businessName: businessName.trim(),
+      phoneNumber: phoneNumber ? phoneNumber.trim() : '',
+      email: email ? email.trim().toLowerCase() : '',
+      website: website ? website.trim() : '',
+      address: address ? address.trim() : '',
+      area: area.trim(),
+      category: category.trim(),
       rating: parseFloat(rating) || 0,
       reviewCount: parseInt(reviewCount, 10) || 0,
-      callStatus: 'Uncontacted',
-      additionalInfo: additionalInfo ? additionalInfo.trim() : '',
+      callStatus: initialStatus,
+      additionalInfo: noteText ? noteText.trim() : '',
+      callNotes: initialNotes,
+      followUpDate: followUpDateVal,
+      followUpType: followUpTypeVal,
+      followUpBy: followUpByVal,
+      followUpByName: followUpByNameVal,
+      closerId: closerIdVal,
+      closerName: closerNameVal,
+      closerFollowUpDate: closerFollowUpDateVal,
       extractedBy: user ? user._id : null,
       extractedByName: user ? user.name : 'Super Admin',
       generatedBy: user ? user._id : null,
       generatedByName: user ? user.name : 'Super Admin'
-    });
+    };
 
-    res.status(201).json({ success: true, data: newLead });
+    if (datasetId) {
+      leadData.datasetId = datasetId;
+      leadData.datasetIds = [datasetId];
+    }
+
+    const newLead = await Lead.create(leadData);
+
+    // If dataset assigned, increment dataset totalLeads count
+    if (datasetId) {
+      try {
+        await Dataset.findByIdAndUpdate(datasetId, { $inc: { totalLeads: 1 } });
+      } catch (dErr) {
+        console.warn('Could not increment dataset lead count:', dErr.message);
+      }
+    }
+
+    res.status(201).json({ success: true, data: newLead, message: 'Lead created successfully.' });
   } catch (error) {
+    console.error('Error in createLead:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

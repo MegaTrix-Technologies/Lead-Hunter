@@ -386,8 +386,8 @@ const ProjectsView = () => {
 
       {/* ─── ASSIGN DEVELOPERS MODAL (SUPER ADMIN) ───────────────────────────── */}
       {assignProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-md shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-xl lg:max-w-2xl shadow-2xl p-6 sm:p-7 space-y-5">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-400" />
@@ -451,8 +451,8 @@ const ProjectsView = () => {
 
       {/* ─── ADD NOTE MODAL ─────────────────────────────────────────────────── */}
       {noteProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <form onSubmit={handleAddNote} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-md shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <form onSubmit={handleAddNote} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-xl lg:max-w-2xl shadow-2xl p-6 sm:p-7 space-y-5">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-blue-400" />
@@ -498,8 +498,8 @@ const ProjectsView = () => {
 
       {/* ─── COMPLETE PROJECT CONFIRMATION MODAL ─────────────────────────────── */}
       {completingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-md shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-xl lg:max-w-2xl shadow-2xl p-6 sm:p-7 space-y-5">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />

@@ -66,7 +66,7 @@ const LeadSchema = new mongoose.Schema({
     type: String,
     enum: [
       'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 
-      'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale',
+      'Do Not Call', 'Shows Interest', 'Follow Up', 'Closer Follow Up', 'Lead / Sale',
       'Lead', 'processing', 'denied', 'sale'
     ],
     default: 'Uncontacted',
@@ -83,6 +83,36 @@ const LeadSchema = new mongoose.Schema({
     author: { type: String, default: 'MegaTrix Agent' }
   }],
   followUpDate: {
+    type: Date,
+    default: null
+  },
+  followUpType: {
+    type: String,
+    enum: ['sales_agent', 'sales_closer', null],
+    default: null,
+    index: true
+  },
+  followUpBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  followUpByName: {
+    type: String,
+    default: ''
+  },
+  closerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null
+  },
+  closerName: {
+    type: String,
+    default: ''
+  },
+  closerFollowUpDate: {
     type: Date,
     default: null
   },
@@ -216,5 +246,7 @@ LeadSchema.index({ businessName: 1, area: 1 });
 LeadSchema.index({ datasetId: 1, callStatus: 1 });
 LeadSchema.index({ extractedBy: 1, callStatus: 1 });
 LeadSchema.index({ generatedBy: 1, callStatus: 1 });
+LeadSchema.index({ closerId: 1, callStatus: 1 });
+LeadSchema.index({ followUpBy: 1, callStatus: 1 });
 
 module.exports = mongoose.model('Lead', LeadSchema);

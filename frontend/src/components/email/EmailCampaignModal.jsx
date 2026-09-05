@@ -119,7 +119,7 @@ const EmailCampaignModal = () => {
       isOpen={isCampaignModalOpen}
       onClose={() => setIsCampaignModalOpen(false)}
       title="Launch Bulk Email Proposal Campaign"
-      maxWidth="max-w-2xl"
+      maxWidth="max-w-4xl lg:max-w-5xl"
     >
       <form onSubmit={handleLaunch} className="space-y-5 font-mono">
         

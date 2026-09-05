@@ -9,7 +9,12 @@ const StatusBadge = ({ status = 'Uncontacted', className = '', size = 'md' }) =>
     'Do Not Call': 'bg-rose-950/40 text-rose-400 border-rose-800/60',
     'Shows Interest': 'bg-blue-950/40 text-blue-400 border-blue-800/60',
     'Follow Up': 'bg-yellow-950/40 text-yellow-300 border-yellow-800/60',
-    'Lead / Sale': 'bg-emerald-950/50 text-emerald-300 border-emerald-500/80 font-bold border-glow-green'
+    'Agent Follow Up': 'bg-yellow-950/40 text-yellow-300 border-yellow-800/60',
+    'Closer Follow Up': 'bg-amber-950/60 text-amber-300 border-amber-600/80 font-bold',
+    'Lead': 'bg-emerald-950/50 text-emerald-300 border-emerald-600/80 font-bold',
+    'Lead / Sale': 'bg-emerald-950/50 text-emerald-300 border-emerald-500/80 font-bold border-glow-green',
+    'sale': 'bg-emerald-950/50 text-emerald-300 border-emerald-500/80 font-bold border-glow-green',
+    'denied': 'bg-rose-950/40 text-rose-400 border-rose-800/60'
   };
 
   const sizeClasses = {

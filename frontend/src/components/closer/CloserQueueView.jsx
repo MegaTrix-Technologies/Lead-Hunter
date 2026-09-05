@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { SaleService, ProductService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import StatusBadge from '../common/StatusBadge';
+import ClipboardButton from '../common/ClipboardButton';
+import RatingStars from '../common/RatingStars';
+import ManualLeadModal from '../crm/ManualLeadModal';
 import { 
   UserCheck, 
   Search, 
@@ -10,6 +14,7 @@ import {
   MapPin, 
   Package, 
   DollarSign, 
+  Plus, 
   CheckCircle2, 
   Calendar, 
   Clock, 
@@ -19,23 +24,61 @@ import {
   AlertCircle,
   Briefcase,
   ChevronRight,
-  RefreshCw
+  ChevronLeft,
+  RefreshCw,
+  Globe,
+  Check,
+  XCircle,
+  CalendarCheck,
+  History,
+  MessageSquare,
+  FileText,
+  ExternalLink,
+  ArrowLeft,
+  Tag
 } from 'lucide-react';
 
 const formatPKR = (num) => `PKR ${(Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
+const toLocalISOString = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const formatDateTimeDisplay = (isoStr) => {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return isoStr;
+  }
+};
+
 const CloserQueueView = () => {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin, isCloser, isSalesAgent } = useAuth();
+  const canAddManualLead = isCloser || isSalesAgent;
   const { addToast } = useToast();
 
+  const [activeTab, setActiveTab] = useState('pool'); // 'pool' | 'my_followups' | 'all_followups'
+  const [tabCounts, setTabCounts] = useState({ pool: 0, myFollowUps: 0, allFollowUps: 0 });
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isManualLeadModalOpen, setIsManualLeadModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [catalogProducts, setCatalogProducts] = useState([]);
   
-  // Action Modal State
+  // Action Modal / Workstation State
   const [activeLead, setActiveLead] = useState(null);
   const [outcome, setOutcome] = useState('Completed'); // 'Completed' | 'Follow Up' | 'Denied'
+  const [denialReason, setDenialReason] = useState('Budget / Price Too High');
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
@@ -53,12 +96,41 @@ const CloserQueueView = () => {
     }
   };
 
-  const fetchQueue = async () => {
+  const applyFollowUpPreset = (type) => {
+    const now = new Date();
+    let target = new Date();
+    if (type === '2h') {
+      target = new Date(now.getTime() + 2 * 3600000);
+    } else if (type === 'tomorrow_10am') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(10, 0, 0, 0);
+    } else if (type === 'tomorrow_3pm') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(15, 0, 0, 0);
+    } else if (type === 'in_2_days') {
+      target.setDate(target.getDate() + 2);
+      target.setHours(11, 0, 0, 0);
+    } else if (type === 'next_monday') {
+      const day = target.getDay();
+      const diff = day === 0 ? 1 : 8 - day;
+      target.setDate(target.getDate() + diff);
+      target.setHours(10, 0, 0, 0);
+    }
+    setFollowUpDate(toLocalISOString(target));
+  };
+
+  const fetchQueue = async (tabToUse = activeTab) => {
     setLoading(true);
     try {
-      const res = await SaleService.getCloserQueue({ search: search.trim() || undefined });
+      const res = await SaleService.getCloserQueue({ 
+        search: search.trim() || undefined,
+        tab: tabToUse
+      });
       if (res.data?.success) {
         setQueue(res.data.data || []);
+        if (res.data.counts) {
+          setTabCounts(res.data.counts);
+        }
       }
     } catch (err) {
       console.error('Error fetching closer queue:', err);
@@ -80,7 +152,10 @@ const CloserQueueView = () => {
   };
 
   useEffect(() => {
-    fetchQueue();
+    fetchQueue(activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
     fetchProducts();
   }, []);
 
@@ -88,7 +163,12 @@ const CloserQueueView = () => {
     setActiveLead(lead);
     setOutcome('Completed');
     setNotes('');
-    setFollowUpDate('');
+    setDenialReason('Budget / Price Too High');
+    setFollowUpDate(
+      lead.closerFollowUpDate 
+        ? toLocalISOString(new Date(lead.closerFollowUpDate)) 
+        : (lead.followUpDate ? toLocalISOString(new Date(lead.followUpDate)) : '')
+    );
     setValidationError('');
     setPaymentMethod('Bank Transfer');
     setPaymentReference('');
@@ -111,6 +191,31 @@ const CloserQueueView = () => {
       setAdvanceAmount('');
     }
   };
+
+  const currentLeadIndex = activeLead ? queue.findIndex(l => l._id === activeLead._id) : -1;
+
+  const handleNextLead = () => {
+    if (currentLeadIndex >= 0 && currentLeadIndex < queue.length - 1) {
+      handleOpenActionModal(queue[currentLeadIndex + 1]);
+    }
+  };
+
+  const handlePrevLead = () => {
+    if (currentLeadIndex > 0) {
+      handleOpenActionModal(queue[currentLeadIndex - 1]);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!activeLead) return;
+      if (e.key === 'Escape') {
+        setActiveLead(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeLead]);
 
   // Toggle product selection
   const handleToggleProduct = (product) => {
@@ -175,6 +280,11 @@ const CloserQueueView = () => {
       }
     }
 
+    if (outcome === 'Follow Up' && !followUpDate) {
+      setValidationError('Please select a follow-up callback date & time.');
+      return;
+    }
+
     setSubmitting(true);
     setValidationError('');
 
@@ -185,20 +295,24 @@ const CloserQueueView = () => {
         advanceAmount: parseFloat(advanceAmount) || 0,
         paymentMethod,
         paymentReference: paymentReference.trim(),
-        notes: notes.trim(),
+        notes: outcome === 'Denied' 
+          ? `[Denial Reason: ${denialReason}] ${notes.trim()}`
+          : notes.trim(),
         followUpDate: outcome === 'Follow Up' ? followUpDate : undefined
       };
 
       const res = await SaleService.closeLead(activeLead._id, payload);
       if (res.data?.success) {
         addToast({
-          title: outcome === 'Completed' ? 'Deal Successfully Closed!' : 'Lead Updated',
+          title: outcome === 'Completed' 
+            ? 'Deal Successfully Closed!' 
+            : (outcome === 'Follow Up' ? 'Closer Follow-Up Scheduled' : 'Lead Marked Denied'),
           message: res.data.message,
           type: 'success',
           duration: 4000
         });
         setActiveLead(null);
-        fetchQueue();
+        fetchQueue(activeTab);
       }
     } catch (err) {
       console.error('Error closing lead:', err);
@@ -224,13 +338,25 @@ const CloserQueueView = () => {
             </h1>
           </div>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Act on qualified inbound/agent leads: configure products, finalize negotiated pricing, log sales advances &amp; instantiate projects.
+            Act on qualified inbound/agent leads: configure products, finalize negotiated pricing, schedule closer follow-ups, log sales advances &amp; instantiate projects.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {canAddManualLead && (
+            <button
+              type="button"
+              onClick={() => setIsManualLeadModalOpen(true)}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black border border-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+              title="Add a new business lead manually"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Lead</span>
+            </button>
+          )}
+
           <button
-            onClick={fetchQueue}
+            onClick={() => fetchQueue(activeTab)}
             className="p-2 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 hover:text-white border border-[#2B2B2B] text-xs cursor-pointer transition-colors"
             title="Refresh closer queue"
           >
@@ -239,22 +365,67 @@ const CloserQueueView = () => {
         </div>
       </div>
 
-      {/* ─── SEARCH & FILTER TOOLBAR ────────────────────────────────────────── */}
-      <div className="bg-[#080808] border border-[#222222] p-3.5 flex items-center justify-between gap-3 text-xs">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+      {/* ─── QUEUE TABS & FILTER TOOLBAR ─────────────────────────────────────── */}
+      <div className="bg-[#080808] border border-[#222222] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        {/* Queue Switcher Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pool')}
+            className={`px-3 py-1.5 border text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-colors ${
+              activeTab === 'pool'
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-600'
+                : 'bg-[#101010] text-zinc-400 border-[#262626] hover:text-white hover:border-zinc-600'
+            }`}
+          >
+            <span>New Leads Pool</span>
+            <span className="px-1.5 py-0.2 bg-black text-[10px] font-mono rounded">
+              {tabCounts.pool}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('my_followups')}
+            className={`px-3 py-1.5 border text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-colors ${
+              activeTab === 'my_followups'
+                ? 'bg-amber-950/60 text-amber-300 border-amber-600'
+                : 'bg-[#101010] text-zinc-400 border-[#262626] hover:text-white hover:border-zinc-600'
+            }`}
+          >
+            <span>My Closer Follow-Ups</span>
+            <span className="px-1.5 py-0.2 bg-black text-[10px] font-mono rounded">
+              {tabCounts.myFollowUps}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('all_followups')}
+            className={`px-3 py-1.5 border text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-colors ${
+              activeTab === 'all_followups'
+                ? 'bg-blue-950/60 text-blue-300 border-blue-600'
+                : 'bg-[#101010] text-zinc-400 border-[#262626] hover:text-white hover:border-zinc-600'
+            }`}
+          >
+            <span>All Closer Follow-Ups</span>
+            <span className="px-1.5 py-0.2 bg-black text-[10px] font-mono rounded">
+              {tabCounts.allFollowUps}
+            </span>
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 max-w-xs">
+          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchQueue()}
-            placeholder="Search leads by business name, phone, or area..."
-            className="w-full pl-8 pr-3 py-1.5 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && fetchQueue(activeTab)}
+            placeholder="Search leads..."
+            className="w-full pl-8 pr-3 py-1 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-blue-500"
           />
-        </div>
-
-        <div className="text-zinc-400 text-xs shrink-0">
-          Available Queue: <strong className="text-white">{queue.length} Leads</strong>
         </div>
       </div>
 
@@ -275,9 +446,7 @@ const CloserQueueView = () => {
                   <h3 className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors truncate flex-1">
                     {lead.businessName}
                   </h3>
-                  <span className="px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-700 text-[10px] uppercase font-bold shrink-0">
-                    {lead.callStatus}
-                  </span>
+                  <StatusBadge status={lead.callStatus} size="sm" />
                 </div>
 
                 <div className="text-xs text-zinc-400 mt-2 space-y-1">
@@ -297,19 +466,33 @@ const CloserQueueView = () => {
                   )}
                 </div>
 
-                {/* Agent Attribution */}
+                {/* Follow-up schedule badge */}
+                {(lead.closerFollowUpDate || (lead.callStatus === 'Closer Follow Up' && lead.followUpDate)) && (
+                  <div className="mt-2 p-1.5 bg-amber-950/40 border border-amber-800/60 text-[10px] text-amber-300 flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>Closer Callback: {formatDateTimeDisplay(lead.closerFollowUpDate || lead.followUpDate)}</span>
+                  </div>
+                )}
+                {lead.callStatus === 'Follow Up' && lead.followUpDate && (
+                  <div className="mt-2 p-1.5 bg-yellow-950/40 border border-yellow-800/60 text-[10px] text-yellow-300 flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-yellow-400 shrink-0" />
+                    <span>Agent Callback: {formatDateTimeDisplay(lead.followUpDate)}</span>
+                  </div>
+                )}
+
+                {/* Agent Attribution & Deal value */}
                 <div className="text-[10px] text-zinc-500 mt-2 pt-2 border-t border-[#181818] flex items-center justify-between">
-                  <span>Generated By: <strong className="text-zinc-300">{lead.generatedByName || lead.extractedByName || 'Sales Desk'}</strong></span>
+                  <span>Qualified: <strong className="text-zinc-300">{lead.generatedByName || lead.extractedByName || 'Sales Desk'}</strong></span>
                   {lead.dealValue > 0 && (
-                    <span className="text-emerald-400 font-bold">
-                      Est. PKR {lead.dealValue.toLocaleString()}
+                    <span className="text-emerald-400 font-bold font-mono">
+                      PKR {lead.dealValue.toLocaleString()}
                     </span>
                   )}
                 </div>
 
-                {/* Agent Notes */}
+                {/* Agent Notes snippet */}
                 {lead.callNotes && lead.callNotes.length > 0 && (
-                  <div className="mt-2 p-2 bg-black border border-[#1C1C1C] text-[10px] text-zinc-400 line-clamp-2">
+                  <div className="mt-2 p-2 bg-black border border-[#1C1C1C] text-[10px] text-zinc-400 line-clamp-2 font-mono">
                     💬 {lead.callNotes[lead.callNotes.length - 1].note}
                   </div>
                 )}
@@ -317,8 +500,9 @@ const CloserQueueView = () => {
 
               {/* Action Trigger Button */}
               <button
+                type="button"
                 onClick={() => handleOpenActionModal(lead)}
-                className="w-full py-2 bg-[#121E17] hover:bg-[#1A2E23] text-emerald-300 border border-emerald-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow"
+                className="w-full py-2.5 bg-[#121E17] hover:bg-[#1A2E23] text-emerald-300 border border-emerald-800 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-colors shadow"
               >
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Act On Lead / Close Deal</span>
@@ -328,90 +512,379 @@ const CloserQueueView = () => {
         </div>
       ) : (
         <div className="p-16 text-center text-zinc-500 text-xs bg-[#080808] border border-[#222222]">
-          No pending leads waiting for closer action in the pool right now.
+          No pending leads in this queue tab right now.
         </div>
       )}
 
-      {/* ─── CLOSER ACTION & PRODUCT CONFIGURATION MODAL ─────────────────────── */}
+      {/* ─── FULL-WINDOW CRM WORKSTATION MODAL ─────────────────────────────── */}
       {activeLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
-            {/* Modal Header */}
-            <div className="p-4 bg-[#0E0E0E] border-b border-[#202020] flex items-center justify-between">
+        <div className="fixed inset-0 z-[9999] bg-[#060606] flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150">
+          
+          {/* 1. TOP BAR / WORKSTATION HEADER */}
+          <div className="px-6 py-4 bg-[#0A0A0A] border-b border-[#202020] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setActiveLead(null)}
+                className="px-3 py-1.5 bg-[#121212] hover:bg-[#1C1C1C] text-zinc-300 hover:text-white border border-[#2B2B2B] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Queue</span>
+              </button>
+
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-400" />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Act on Lead — {activeLead.businessName}
-                  </h3>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-lg font-bold text-white tracking-wide">
+                    {activeLead.businessName}
+                  </h2>
+                  <StatusBadge status={activeLead.callStatus} size="md" />
+                  <span className="text-xs px-2 py-0.5 bg-[#141414] border border-[#2B2B2B] text-zinc-300">
+                    {activeLead.category || 'General'}
+                  </span>
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5">
-                  Lead Gen: {activeLead.generatedByName || activeLead.extractedByName || 'Agent'} • {activeLead.area} • Phone: {activeLead.phoneNumber}
-                </p>
+                <div className="flex items-center gap-3 text-xs text-zinc-400 mt-1 flex-wrap">
+                  <span className="flex items-center gap-1 text-zinc-400">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                    {activeLead.address || activeLead.area || 'Lahore'}
+                  </span>
+                  <RatingStars rating={activeLead.rating} reviewCount={activeLead.reviewCount} />
+                  <span className="text-zinc-500">•</span>
+                  <span>
+                    Qualified by: <strong className="text-zinc-200">{activeLead.generatedByName || activeLead.extractedByName || 'Sales Agent'}</strong>
+                  </span>
+                  {activeLead.closerName && (
+                    <>
+                      <span className="text-zinc-500">•</span>
+                      <span className="text-amber-300">
+                        Closer: <strong>{activeLead.closerName}</strong>
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
+            </div>
+
+            {/* Queue Stepper / Navigation Controls */}
+            <div className="flex items-center gap-2 self-end lg:self-center">
+              {currentLeadIndex >= 0 && (
+                <div className="flex items-center gap-1.5 mr-2">
+                  <button
+                    type="button"
+                    onClick={handlePrevLead}
+                    disabled={currentLeadIndex === 0}
+                    className="px-2.5 py-1.5 bg-[#121212] hover:bg-[#1A1A1A] text-zinc-300 border border-[#2B2B2B] text-xs font-bold disabled:opacity-30 cursor-pointer flex items-center gap-1"
+                    title="Previous lead [P]"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                  </button>
+                  <span className="text-xs text-zinc-400 font-mono px-1">
+                    #{currentLeadIndex + 1} / {queue.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextLead}
+                    disabled={currentLeadIndex === queue.length - 1}
+                    className="px-2.5 py-1.5 bg-[#121212] hover:bg-[#1A1A1A] text-zinc-300 border border-[#2B2B2B] text-xs font-bold disabled:opacity-30 cursor-pointer flex items-center gap-1"
+                    title="Next lead [N]"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               <button
+                type="button"
                 onClick={() => setActiveLead(null)}
-                className="p-1 text-zinc-500 hover:text-white cursor-pointer"
+                className="p-1.5 bg-[#121212] hover:bg-[#1F1F1F] text-zinc-400 hover:text-white border border-[#2B2B2B] cursor-pointer"
+                title="Close Workstation (Esc)"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSubmitAction} className="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
-              
-              {/* Validation Alert */}
-              {validationError && (
-                <div className="p-3 bg-red-950/40 border border-red-700 text-red-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <span>{validationError}</span>
+          {/* 2. QUICK DETAILS BAR (Like CRM) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#1A1A1A] border-b border-[#1E1E1E] bg-[#050505] shrink-0 text-xs">
+            <div className="p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-950/40 border border-emerald-800/60 text-emerald-400">
+                  <Phone className="w-4 h-4" />
                 </div>
-              )}
+                <div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-mono">Direct Phone</div>
+                  <a
+                    href={`tel:${activeLead.phoneNumber}`}
+                    className="text-xs font-bold text-white hover:text-emerald-400 hover:underline font-mono"
+                  >
+                    {activeLead.phoneNumber || 'No phone registered'}
+                  </a>
+                </div>
+              </div>
+              {activeLead.phoneNumber && <ClipboardButton text={activeLead.phoneNumber} />}
+            </div>
 
-              {/* 1. Outcome Selector Tabs */}
-              <div>
-                <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2">
-                  Select Closing Outcome:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'Completed', label: 'Mark Completed (Won Deal)', color: 'border-emerald-600 bg-emerald-950/40 text-emerald-300' },
-                    { id: 'Follow Up', label: 'Schedule Follow Up', color: 'border-yellow-600 bg-yellow-950/40 text-yellow-300' },
-                    { id: 'Denied', label: 'Mark Denied / Opt-Out', color: 'border-rose-600 bg-rose-950/40 text-rose-300' }
-                  ].map(opt => (
-                    <button
-                      type="button"
-                      key={opt.id}
-                      onClick={() => setOutcome(opt.id)}
-                      className={`p-2.5 border text-xs font-bold uppercase tracking-wider cursor-pointer transition-all ${
-                        outcome === opt.id
-                          ? `${opt.color} ring-1 ring-white/20`
-                          : 'border-[#222222] bg-[#0A0A0A] text-zinc-400 hover:text-white'
-                      }`}
+            <div className="p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-950/40 border border-blue-800/60 text-blue-400">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-mono">Website</div>
+                  {activeLead.website ? (
+                    <a
+                      href={activeLead.website}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-blue-400 hover:underline truncate max-w-[140px] block"
                     >
-                      {opt.label}
-                    </button>
-                  ))}
+                      {activeLead.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  ) : (
+                    <span className="text-xs text-zinc-500 font-mono">None registered</span>
+                  )}
+                </div>
+              </div>
+              {activeLead.website && <ClipboardButton text={activeLead.website} />}
+            </div>
+
+            <div className="p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-purple-950/40 border border-purple-800/60 text-purple-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-mono">Email Address</div>
+                  {activeLead.email ? (
+                    <a
+                      href={`mailto:${activeLead.email}`}
+                      className="text-xs font-bold text-white hover:text-purple-400 hover:underline truncate max-w-[140px] block"
+                    >
+                      {activeLead.email}
+                    </a>
+                  ) : (
+                    <span className="text-xs text-zinc-500 font-mono">None registered</span>
+                  )}
+                </div>
+              </div>
+              {activeLead.email && <ClipboardButton text={activeLead.email} />}
+            </div>
+
+            <div className="p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-950/40 border border-amber-800/60 text-amber-400">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-mono">
+                    {activeLead.callStatus === 'Closer Follow Up' ? 'Closer Follow-Up' : 'Callback Schedule'}
+                  </div>
+                  <div className="text-xs font-bold text-amber-300 font-mono">
+                    {formatDateTimeDisplay(activeLead.closerFollowUpDate || activeLead.followUpDate) || 'None Scheduled'}
+                  </div>
+                </div>
+              </div>
+              {activeLead.dealValue > 0 && (
+                <span className="text-[11px] font-mono font-bold text-emerald-400">
+                  PKR {activeLead.dealValue.toLocaleString()}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 3. WORKSPACE BODY: 2-COLUMN CRM WORKSTATION */}
+          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#080808]">
+            
+            {/* LEFT COLUMN (col-span-5): Lead Dossier, Agent Handoff, Call Timeline */}
+            <div className="lg:col-span-5 space-y-5">
+              
+              {/* Sales Agent Qualification Brief & Initial Products */}
+              <div className="p-4 bg-[#0A0A0A] border border-[#222222] space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1A1A1A] pb-2">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-blue-400" />
+                    <span>Sales Agent Qualification Handoff</span>
+                  </h4>
+                  <span className="text-[10px] px-2 py-0.5 bg-[#141414] text-zinc-400 border border-[#262626]">
+                    Agent: {activeLead.generatedByName || activeLead.extractedByName || 'Sales Agent'}
+                  </span>
+                </div>
+
+                {activeLead.additionalInfo && (
+                  <div className="p-3 bg-black border border-[#1A1A1A] text-xs text-zinc-300 space-y-1">
+                    <div className="text-[10px] text-zinc-500 uppercase font-mono font-bold">Qualification Notes:</div>
+                    <p className="whitespace-pre-line leading-relaxed">{activeLead.additionalInfo}</p>
+                  </div>
+                )}
+
+                {activeLead.interestedProducts && activeLead.interestedProducts.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] text-zinc-400 uppercase font-mono font-bold">
+                      Products Proposed by Agent:
+                    </div>
+                    <div className="space-y-1">
+                      {activeLead.interestedProducts.map((p, i) => (
+                        <div key={i} className="p-2 bg-[#050505] border border-[#1E1E1E] flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-white font-bold">{p.name}</span>
+                            {p.category && <span className="text-zinc-500 text-[10px] ml-2">({p.category})</span>}
+                          </div>
+                          <span className="font-mono font-bold text-emerald-400">
+                            {formatPKR(p.finalPrice || p.basePrice)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-500 italic">
+                    No initial products locked by sales agent. Closer can select offerings from the catalog.
+                  </p>
+                )}
+              </div>
+
+              {/* Call Notes & Historical Interaction Timeline */}
+              <div className="p-4 bg-[#0A0A0A] border border-[#222222] space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1A1A1A] pb-2">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <History className="w-4 h-4 text-purple-400" />
+                    <span>Call Notes &amp; Interaction Timeline</span>
+                  </h4>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {activeLead.callNotes ? activeLead.callNotes.length : 0} Entries
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {activeLead.callNotes && activeLead.callNotes.length > 0 ? (
+                    activeLead.callNotes.slice().reverse().map((n, idx) => (
+                      <div key={idx} className="p-3 bg-black border border-[#1C1C1C] space-y-1 text-xs">
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                          <span className="text-zinc-300 font-bold">
+                            {n.author || 'Desk Agent'}
+                          </span>
+                          <span className="font-mono">
+                            {formatDateTimeDisplay(n.timestamp)}
+                          </span>
+                        </div>
+                        <p className="text-zinc-300 whitespace-pre-line leading-relaxed">
+                          {n.note}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-zinc-600 text-xs italic">
+                      No previous notes recorded for this lead.
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* 2. When outcome === 'Completed': Mandatory Product Selection & Pricing */}
+              {/* Business Profile Metadata */}
+              <div className="p-4 bg-[#0A0A0A] border border-[#222222] space-y-2 text-xs">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-[#1A1A1A] pb-2">
+                  <MapPin className="w-4 h-4 text-emerald-400" />
+                  <span>Location &amp; Registry Details</span>
+                </h4>
+                <div className="space-y-1 text-zinc-400">
+                  <div><strong>Address:</strong> {activeLead.address || 'Not listed'}</div>
+                  <div><strong>Area / City:</strong> {activeLead.area || 'Lahore'}</div>
+                  <div><strong>Category:</strong> {activeLead.category || 'General'}</div>
+                  {activeLead.rating && (
+                    <div><strong>Google Rating:</strong> ⭐ {activeLead.rating} ({activeLead.reviewCount || 0} reviews)</div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN (col-span-7): 3 Action Buttons & Closer Console */}
+            <div className="lg:col-span-7 space-y-5">
+              
+              {/* THE 3 ACTION BUTTONS (Deal closed, Denied, Follow up) */}
+              <div className="p-5 bg-[#0A0A0A] border border-[#262626] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                    <span>Select Closer Action:</span>
+                  </label>
+                  <span className="text-[11px] text-zinc-500">
+                    Replaces cold calling dispositions with closing workflows
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  {/* 1. Deal Closed Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOutcome('Completed');
+                      setValidationError('');
+                    }}
+                    className={`p-3.5 border text-xs font-bold uppercase tracking-wider flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      outcome === 'Completed'
+                        ? 'border-emerald-500 bg-emerald-950/60 text-emerald-300 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-950/50'
+                        : 'border-[#222222] bg-[#0E0E0E] text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    <CheckCircle2 className={`w-5 h-5 ${outcome === 'Completed' ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                    <span>Deal Closed</span>
+                    <span className="text-[9px] text-zinc-500 font-normal">Won Deal &amp; Advance</span>
+                  </button>
+
+                  {/* 2. Follow Up Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOutcome('Follow Up');
+                      setValidationError('');
+                      if (!followUpDate) applyFollowUpPreset('tomorrow_10am');
+                    }}
+                    className={`p-3.5 border text-xs font-bold uppercase tracking-wider flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      outcome === 'Follow Up'
+                        ? 'border-amber-500 bg-amber-950/60 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-950/50'
+                        : 'border-[#222222] bg-[#0E0E0E] text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    <Clock className={`w-5 h-5 ${outcome === 'Follow Up' ? 'text-amber-400' : 'text-zinc-500'}`} />
+                    <span>Follow Up</span>
+                    <span className="text-[9px] text-zinc-500 font-normal">Closer Callback</span>
+                  </button>
+
+                  {/* 3. Denied Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOutcome('Denied');
+                      setValidationError('');
+                    }}
+                    className={`p-3.5 border text-xs font-bold uppercase tracking-wider flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      outcome === 'Denied'
+                        ? 'border-rose-500 bg-rose-950/60 text-rose-300 ring-2 ring-rose-500/50 shadow-lg shadow-rose-950/50'
+                        : 'border-[#222222] bg-[#0E0E0E] text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    <XCircle className={`w-5 h-5 ${outcome === 'Denied' ? 'text-rose-400' : 'text-zinc-500'}`} />
+                    <span>Denied</span>
+                    <span className="text-[9px] text-zinc-500 font-normal">Lost / Opt-Out</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ACTION CONSOLE: DEAL CLOSED (Won Deal) */}
               {outcome === 'Completed' && (
-                <div className="p-4 bg-[#050B07] border border-emerald-800/80 space-y-4">
-                  <div className="flex items-center justify-between border-b border-emerald-900/60 pb-2">
-                    <span className="text-xs font-bold text-emerald-300 uppercase flex items-center gap-1.5">
+                <div className="p-5 bg-[#050B07] border-2 border-emerald-800/80 space-y-5">
+                  <div className="flex items-center justify-between border-b border-emerald-900/60 pb-3">
+                    <span className="text-xs font-bold text-emerald-300 uppercase flex items-center gap-2">
                       <Package className="w-4 h-4 text-emerald-400" />
-                      Mandatory Offering Selection &amp; Agreed Pricing:
+                      Select Products &amp; Negotiated Closing Rates:
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-semibold">
-                      {selectedProducts.length} Selected
+                    <span className="text-xs text-emerald-400 font-mono font-bold">
+                      {selectedProducts.length} Product(s) Selected
                     </span>
                   </div>
 
-                  {/* Products Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-52 overflow-y-auto pr-1">
+                  {/* Product Catalog Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
                     {catalogProducts.map(prod => {
                       const isSelected = selectedProducts.some(p => (p.productId || p._id) === prod._id);
                       const selectedItem = selectedProducts.find(p => (p.productId || p._id) === prod._id);
@@ -424,8 +897,8 @@ const CloserQueueView = () => {
                           key={prod._id}
                           className={`p-3 border transition-all ${
                             isSelected
-                              ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500/40'
-                              : 'border-[#222222] bg-black/60 hover:border-zinc-700'
+                              ? 'border-emerald-500 bg-emerald-950/50 ring-1 ring-emerald-500/40'
+                              : 'border-[#222222] bg-black/70 hover:border-zinc-700'
                           }`}
                         >
                           <div
@@ -441,7 +914,7 @@ const CloserQueueView = () => {
                               />
                               <div>
                                 <div className="text-xs font-bold text-white">{prod.name}</div>
-                                <span className="text-[9px] text-zinc-500">{prod.category}</span>
+                                <span className="text-[10px] text-zinc-500">{prod.category}</span>
                               </div>
                             </div>
                             <div className="text-right shrink-0">
@@ -480,16 +953,16 @@ const CloserQueueView = () => {
                     })}
                   </div>
 
-                  {/* Deal Financial & Advance Payment Settlement Console */}
+                  {/* Financial Deal Console */}
                   {selectedProducts.length > 0 && (
                     <div className="p-4 bg-black border-2 border-emerald-600/80 space-y-4 shadow-lg">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-950">
                         <div>
-                          <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block">Agreed Total Deal Value:</span>
-                          <span className="text-xl font-bold text-white font-mono">{formatPKR(totalDealValue)}</span>
+                          <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block">Total Agreed Deal Value:</span>
+                          <span className="text-2xl font-bold text-white font-mono">{formatPKR(totalDealValue)}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-700">
+                          <span className="text-[10px] uppercase font-bold px-2.5 py-1 bg-emerald-950 text-emerald-300 border border-emerald-700">
                             {selectedProducts.length} Offering(s) Configured
                           </span>
                         </div>
@@ -500,7 +973,7 @@ const CloserQueueView = () => {
                         <div className="flex items-center justify-between">
                           <label className="text-xs text-emerald-300 font-bold uppercase flex items-center gap-1.5">
                             <DollarSign className="w-4 h-4 text-emerald-400" />
-                            Select Advance Amount Paid by Client:
+                            Advance Payment Collected by Closer:
                           </label>
                           <span className="text-xs text-emerald-400 font-mono font-bold">
                             {totalDealValue > 0 ? Math.round(((parseFloat(advanceAmount) || 0) / totalDealValue) * 100) : 0}% of Total
@@ -625,7 +1098,7 @@ const CloserQueueView = () => {
                         </div>
                         <div>
                           <label className="block text-[11px] text-zinc-400 uppercase font-bold mb-1">
-                            Transaction / Receipt Reference (Optional):
+                            Transaction / Receipt Reference:
                           </label>
                           <input
                             type="text"
@@ -641,65 +1114,211 @@ const CloserQueueView = () => {
                 </div>
               )}
 
-              {/* 3. When outcome === 'Follow Up' */}
+              {/* ACTION CONSOLE: FOLLOW UP (Closer Callback) */}
               {outcome === 'Follow Up' && (
-                <div className="p-4 bg-[#0E0C06] border border-yellow-800/80 space-y-3">
-                  <label className="block text-xs font-bold text-yellow-300 uppercase">
-                    Callback Scheduled Date &amp; Time:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={followUpDate}
-                    onChange={(e) => setFollowUpDate(e.target.value)}
-                    className="px-3 py-2 bg-black border border-yellow-700 text-yellow-200 text-xs focus:outline-none w-full sm:w-auto"
-                    required
-                  />
+                <div className="p-5 bg-[#0E0C06] border-2 border-amber-800/80 space-y-4">
+                  <div className="flex items-center justify-between border-b border-amber-900/60 pb-3">
+                    <span className="text-xs font-bold text-amber-300 uppercase flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                      Schedule Closer Callback &amp; Negotiation:
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono">
+                      Assigned exclusively to your closer queue
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block text-xs font-bold text-zinc-300 uppercase">
+                      Callback Scheduled Date &amp; Time:
+                    </label>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <input
+                        type="datetime-local"
+                        value={followUpDate}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        className="px-3 py-2 bg-black border border-amber-700 text-amber-200 text-xs font-mono focus:outline-none w-full sm:w-auto"
+                        required
+                      />
+                      <span className="text-xs text-amber-400 font-mono font-bold">
+                        {followUpDate ? formatDateTimeDisplay(followUpDate) : 'Select date below'}
+                      </span>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="pt-2">
+                      <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1.5">
+                        Quick Callback Presets:
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                        {[
+                          { id: '2h', label: '+2 Hours' },
+                          { id: 'tomorrow_10am', label: 'Tmrw 10 AM' },
+                          { id: 'tomorrow_3pm', label: 'Tmrw 3 PM' },
+                          { id: 'in_2_days', label: 'In 2 Days' },
+                          { id: 'next_monday', label: 'Next Mon' }
+                        ].map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => applyFollowUpPreset(p.id)}
+                            className="px-2 py-1.5 bg-[#141414] hover:bg-amber-950 text-amber-300 hover:text-amber-200 border border-amber-800/60 text-xs font-mono font-bold cursor-pointer transition-colors"
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Optional Proposed Products during Follow-up */}
+                  <div className="pt-2 border-t border-amber-950">
+                    <div className="text-[11px] text-zinc-400 mb-2">
+                      Proposed Offerings Under Negotiation ({selectedProducts.length} Selected):
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                      {catalogProducts.map(prod => {
+                        const isSelected = selectedProducts.some(p => (p.productId || p._id) === prod._id);
+                        return (
+                          <div
+                            key={prod._id}
+                            onClick={() => handleToggleProduct(prod)}
+                            className={`p-2 border text-xs cursor-pointer flex items-center justify-between ${
+                              isSelected 
+                                ? 'border-amber-500 bg-amber-950/40 text-amber-200' 
+                                : 'border-zinc-800 bg-black text-zinc-500 hover:border-zinc-600'
+                            }`}
+                          >
+                            <span className="truncate">{prod.name}</span>
+                            <span className="font-mono font-bold text-[10px] shrink-0 ml-2">{formatPKR(prod.basePrice)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* 4. Notes & Interaction Details */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                  Closer Notes &amp; Deal Log:
+              {/* ACTION CONSOLE: DENIED (Lost / Opt-Out) */}
+              {outcome === 'Denied' && (
+                <div className="p-5 bg-[#120606] border-2 border-rose-800/80 space-y-4">
+                  <div className="flex items-center justify-between border-b border-rose-900/60 pb-3">
+                    <span className="text-xs font-bold text-rose-300 uppercase flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-rose-400" />
+                      Record Deal Loss / Denial Reason:
+                    </span>
+                    <span className="text-[10px] text-rose-400 font-mono">
+                      Lead will be closed and removed from active pool
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-zinc-300 uppercase">
+                      Primary Reason for Denial:
+                    </label>
+                    <select
+                      value={denialReason}
+                      onChange={(e) => setDenialReason(e.target.value)}
+                      className="w-full px-3 py-2 bg-black border border-rose-800 text-rose-200 text-xs font-mono focus:outline-none"
+                    >
+                      <option value="Budget / Price Too High">Budget / Price Too High</option>
+                      <option value="Competitor Chosen">Competitor Chosen / Already Has Vendor</option>
+                      <option value="Timing / Not Ready Now">Timing / Not Ready Right Now</option>
+                      <option value="No Requirement / Not Interested">No Requirement / Not Interested</option>
+                      <option value="Invalid / Fake Contact">Invalid / Fake Contact</option>
+                      <option value="Client Unresponsive / Ghosted">Client Unresponsive / Ghosted</option>
+                      <option value="Other">Other Reason (Specify in Notes)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* CLOSER NOTES & DEAL LOG */}
+              <div className="p-4 bg-[#0A0A0A] border border-[#222222] space-y-2">
+                <label className="block text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+                  <span>Closer Deal Notes &amp; Interaction Log:</span>
+                  <span className="text-[10px] text-zinc-500 font-normal">Appended to lead audit history</span>
                 </label>
                 <textarea
                   rows="3"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Enter deal terms, customer commitments, delivery specifications, or reason for denial..."
-                  className="w-full p-3 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-700 focus:outline-none focus:border-white resize-none"
+                  placeholder={
+                    outcome === 'Completed'
+                      ? 'Enter agreed scope, deliverables, client expectations, special terms...'
+                      : (outcome === 'Follow Up' ? 'Enter callback topics, specific objections to resolve, negotiated rates...' : 'Enter feedback or reason details...')
+                  }
+                  className="w-full p-3 bg-black border border-[#2B2B2B] text-white text-xs placeholder-zinc-700 focus:outline-none focus:border-blue-500 resize-none font-mono"
                 />
               </div>
 
-              {/* Modal Footer Buttons */}
-              <div className="pt-3 border-t border-[#1E1E1E] flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveLead(null)}
-                  className="px-4 py-2 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 border border-[#2A2A2A] text-xs font-bold uppercase cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-6 py-2 bg-white hover:bg-zinc-200 text-black border border-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
-                >
-                  {submitting ? (
-                    <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  )}
-                  <span>Confirm Closer Action</span>
-                </button>
-              </div>
-
-            </form>
+            </div>
 
           </div>
+
+          {/* 4. STICKY ACTION CONFIRMATION FOOTER */}
+          <div className="px-6 py-4 bg-[#0A0A0A] border-t border-[#202020] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveLead(null)}
+                className="px-4 py-2 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 hover:text-white border border-[#2B2B2B] text-xs font-bold uppercase cursor-pointer transition-colors"
+              >
+                Cancel [Esc]
+              </button>
+
+              {validationError && (
+                <div className="text-red-400 text-xs flex items-center gap-1.5 font-bold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSubmitAction}
+                disabled={submitting}
+                className={`px-6 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer disabled:opacity-40 shadow-lg transition-all ${
+                  outcome === 'Completed'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-300'
+                    : (outcome === 'Follow Up'
+                      ? 'bg-amber-500 hover:bg-amber-400 text-black border border-amber-300'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white border border-rose-400')
+                }`}
+              >
+                {submitting ? (
+                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : outcome === 'Completed' ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : outcome === 'Follow Up' ? (
+                  <CalendarCheck className="w-4 h-4" />
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+
+                <span>
+                  {outcome === 'Completed'
+                    ? (advanceAmount ? `Confirm & Won Deal (${formatPKR(advanceAmount)} Advance)` : 'Confirm & Won Deal')
+                    : (outcome === 'Follow Up'
+                      ? 'Confirm Closer Follow-Up Callback'
+                      : 'Confirm Mark Denied')}
+                </span>
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
+
+      {/* ─── MANUAL LEAD CREATION MODAL ────────────────────────────────────── */}
+      <ManualLeadModal
+        isOpen={isManualLeadModalOpen}
+        onClose={() => setIsManualLeadModalOpen(false)}
+        onSuccess={() => fetchQueue(activeTab)}
+        defaultStatus="Lead"
+      />
 
     </div>
   );

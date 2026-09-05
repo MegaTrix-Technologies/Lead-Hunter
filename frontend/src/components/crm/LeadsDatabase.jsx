@@ -8,6 +8,7 @@ import RatingStars from '../common/RatingStars';
 import ClipboardButton from '../common/ClipboardButton';
 import Pagination from '../common/Pagination';
 import Modal from '../common/Modal';
+import ManualLeadModal from './ManualLeadModal';
 import { 
   Search, 
   Filter, 
@@ -27,7 +28,9 @@ import {
 } from 'lucide-react';
 
 const LeadsDatabase = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isSalesAgent, isCloser } = useAuth();
+  const canAddManualLead = isSalesAgent || isCloser;
+
   const { 
     leads, 
     loadingLeads, 
@@ -45,18 +48,7 @@ const LeadsDatabase = () => {
 
   const { addToast } = useToast();
 
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newLeadForm, setNewLeadForm] = useState({
-    businessName: '',
-    category: 'Real Estate',
-    area: 'Gulberg, Lahore',
-    phoneNumber: '',
-    email: '',
-    website: '',
-    address: '',
-    rating: 4.0,
-    reviewCount: 20
-  });
+  const [isManualLeadModalOpen, setIsManualLeadModalOpen] = useState(false);
 
   const statuses = ['ALL', 'Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Do Not Call', 'Shows Interest', 'Follow Up', 'Lead / Sale'];
 
@@ -116,31 +108,6 @@ const LeadsDatabase = () => {
     addToast({ title: 'Export Generated', message: `Downloading ${format.toUpperCase()} leads file...`, type: 'info' });
   };
 
-  const handleCreateLead = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await LeadService.createLead(newLeadForm);
-      if (res.data.success) {
-        addToast({ title: 'Lead Added', message: `Created "${newLeadForm.businessName}"`, type: 'success' });
-        setIsAddModalOpen(false);
-        setNewLeadForm({
-          businessName: '',
-          category: 'Real Estate',
-          area: 'Gulberg, Lahore',
-          phoneNumber: '',
-          email: '',
-          website: '',
-          address: '',
-          rating: 4.0,
-          reviewCount: 20
-        });
-        fetchLeads(1);
-      }
-    } catch (error) {
-      addToast({ title: 'Error Creating Lead', message: error.message, type: 'error' });
-    }
-  };
-
   return (
     <div className="space-y-6">
       
@@ -159,14 +126,17 @@ const LeadsDatabase = () => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-3.5 py-2 bg-white text-black font-mono text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Lead</span>
-            </button>
+            {canAddManualLead && (
+              <button
+                type="button"
+                onClick={() => setIsManualLeadModalOpen(true)}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Manually log a new business lead"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Lead Manually</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -426,121 +396,12 @@ const LeadsDatabase = () => {
         />
       </div>
 
-      {/* Manual Add Lead Modal */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Add New B2B Lead Record"
-        maxWidth="max-w-xl"
-      >
-        <form onSubmit={handleCreateLead} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Business Name <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={newLeadForm.businessName}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, businessName: e.target.value })}
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Category / Niche <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={newLeadForm.category}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, category: e.target.value })}
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Area / City <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={newLeadForm.area}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, area: e.target.value })}
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Phone Number
-              </label>
-              <input
-                type="text"
-                value={newLeadForm.phoneNumber}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, phoneNumber: e.target.value })}
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={newLeadForm.email}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, email: e.target.value })}
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-                Website URL
-              </label>
-              <input
-                type="text"
-                value={newLeadForm.website}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, website: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
-              Physical Street Address
-            </label>
-            <input
-              type="text"
-              value={newLeadForm.address}
-              onChange={(e) => setNewLeadForm({ ...newLeadForm, address: e.target.value })}
-              className="w-full px-3 py-2 bg-black border border-zinc-700 text-xs font-mono text-white focus:outline-none focus:border-white"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 border border-zinc-700 text-xs font-mono text-zinc-300"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-white text-black font-mono text-xs font-bold uppercase tracking-wider hover:bg-zinc-200"
-            >
-              Save Record
-            </button>
-          </div>
-        </form>
-      </Modal>
+      {/* Manual Add Lead Modal (Sales Agent + Closer) */}
+      <ManualLeadModal
+        isOpen={isManualLeadModalOpen}
+        onClose={() => setIsManualLeadModalOpen(false)}
+        onSuccess={() => fetchLeads(1)}
+      />
 
     </div>
   );

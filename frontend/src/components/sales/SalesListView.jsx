@@ -432,8 +432,8 @@ const SalesListView = () => {
 
       {/* ─── COLLECT REMAINING PAYMENT MODAL ─────────────────────────────────── */}
       {paymentSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-md shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-xl lg:max-w-2xl shadow-2xl p-6 sm:p-7 space-y-5">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-emerald-400" />
@@ -496,8 +496,8 @@ const SalesListView = () => {
 
       {/* ─── CREATE MANUAL SALE MODAL (SUPER ADMIN) ─────────────────────────── */}
       {isManualModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <form onSubmit={handleCreateManualSale} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <form onSubmit={handleCreateManualSale} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-4xl lg:max-w-5xl shadow-2xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />

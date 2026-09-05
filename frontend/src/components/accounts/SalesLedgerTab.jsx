@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { AccountService } from '../../services/api';
-import { Search, Filter, ChevronLeft, ChevronRight, Briefcase, Tag, MapPin, User, CheckCircle2 } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Briefcase, Tag, MapPin, User, CheckCircle2, Plus } from 'lucide-react';
 
 const formatPKR = (num) => `PKR ${(Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-const SalesLedgerTab = ({ periodParams }) => {
+const SalesLedgerTab = ({ periodParams, onAddSale }) => {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
@@ -62,19 +62,33 @@ const SalesLedgerTab = ({ periodParams }) => {
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
         </form>
 
-        {/* Category Dropdown Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-zinc-500" />
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 bg-[#050505] border border-[#2B2B2B] text-xs text-zinc-300 font-mono focus:border-blue-500 focus:outline-none cursor-pointer"
-          >
-            <option value="all">All Industries / Niches</option>
-            {categories.map((c, i) => (
-              <option key={i} value={c}>{c}</option>
-            ))}
-          </select>
+        {/* Category Dropdown Filter & Add Sale Action */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-zinc-500" />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-2 bg-[#050505] border border-[#2B2B2B] text-xs text-zinc-300 font-mono focus:border-blue-500 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Industries / Niches</option>
+              {categories.map((c, i) => (
+                <option key={i} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {onAddSale && (
+            <button
+              type="button"
+              onClick={onAddSale}
+              className="px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              title="Add a manual sale"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Add Sale</span>
+            </button>
+          )}
         </div>
 
       </div>

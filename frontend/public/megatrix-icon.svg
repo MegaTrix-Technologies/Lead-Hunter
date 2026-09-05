@@ -7,14 +7,14 @@
 -->
 <svg
   xmlns="http://www.w3.org/2000/svg"
-  viewBox="0 0 160 160"
+  viewBox="0 0 140 80"
   role="img"
   aria-label="MEGATRIX Icon"
 >
   <title>MEGATRIX Icon</title>
   <desc>MEGATRIX pixel-art MT monogram icon.</desc>
 
-  <g transform="translate(10, 40)" fill="#FFFFFF">
+  <g fill="#FFFFFF">
     <!-- Row 0: ##....#######. -->
     <rect x="1"   y="1"  width="8" height="8"/>
     <rect x="11"  y="1"  width="8" height="8"/>

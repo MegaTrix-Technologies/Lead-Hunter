@@ -46,21 +46,21 @@ const LoginPage = () => {
         {/* Card Header & Brand */}
         <div className="p-8 pb-6 text-center space-y-3 border-b border-[#1A1A1A]">
           
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-3.5">
             <img 
               src="/megatrix-icon.svg" 
-              alt="MegaTrix" 
-              className="h-9 w-auto object-contain"
+              alt="MegaTrix Technologies" 
+              className="h-12 w-auto object-contain"
               onError={(e) => {
                 e.target.style.display = 'none';
               }}
             />
             <div className="text-left">
-              <span className="font-mono font-bold text-lg tracking-widest text-white uppercase block leading-none">
-                MegaTrix
+              <span className="font-mono font-bold text-lg sm:text-xl tracking-widest text-white uppercase block leading-tight">
+                MEGATRIX TECHNOLOGIES
               </span>
-              <span className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase mt-1 block">
-                LeadEngine &amp; CRM
+              <span className="text-[10px] font-mono text-zinc-400 tracking-wider uppercase mt-1 block">
+                Customer Relationship Manager
               </span>
             </div>
           </div>
@@ -180,13 +180,13 @@ const LoginPage = () => {
 
       {/* Legal / Copyright Footer */}
       <div className="mt-8 text-center text-xs text-zinc-600 font-mono">
-        MegaTrix LeadEngine &amp; CRM &copy; 2026. All rights reserved.
+        MegaTrix Technologies — Customer Relationship Manager &copy; 2026. All rights reserved.
       </div>
 
       {/* Password Reset Notice Modal */}
       {showResetNotice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md bg-[#0D0D0D] border border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.2)] p-6 space-y-4 font-mono">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg bg-[#0D0D0D] border border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.2)] p-6 sm:p-7 space-y-4 font-mono">
             {/* Header */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">

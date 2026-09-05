@@ -110,8 +110,8 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-[#080808] border border-[#2B2B2B] w-full max-w-3xl shadow-2xl relative overflow-hidden font-mono">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-[#080808] border border-[#2B2B2B] w-full max-w-4xl lg:max-w-5xl shadow-2xl relative overflow-hidden font-mono">
         
         {/* Header Bar */}
         <div className="p-4 sm:p-5 border-b border-[#222] bg-[#0C0C0C] flex items-center justify-between">

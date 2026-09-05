@@ -1104,8 +1104,8 @@ const SettingsView = () => {
 
       {/* ─── MODAL 1: CREATE USER PROFILE MODAL ─────────────────────────────── */}
       {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-lg p-6 space-y-5 shadow-2xl relative font-mono my-8">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl p-6 sm:p-8 space-y-5 shadow-2xl relative font-mono my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-400" />
@@ -1353,8 +1353,8 @@ const SettingsView = () => {
 
       {/* ─── MODAL 2: EDIT USER PROFILE, ROLES & COMMISSIONS MODAL ──────────── */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-lg p-6 space-y-5 shadow-2xl relative font-mono text-xs my-8">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl p-6 sm:p-8 space-y-5 shadow-2xl relative font-mono text-xs my-8">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-blue-400" />

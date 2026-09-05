@@ -2,29 +2,37 @@ import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-3xl' }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-5xl' }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && isOpen) {
         onClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-        {/* Backdrop */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        {/* Translucent Backdrop with blur */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm"
         />
 
         {/* Dialog Container */}
@@ -49,7 +57,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-3xl' }) => 
           </div>
 
           {/* Body */}
-          <div className="max-h-[80vh] overflow-y-auto p-6">
+          <div className="max-h-[85vh] overflow-y-auto p-6 sm:p-8">
             {children}
           </div>
         </motion.div>

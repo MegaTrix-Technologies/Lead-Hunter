@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { DashboardService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLead } from '../../context/LeadContext';
@@ -17,6 +18,7 @@ import {
   CheckCircle2, 
   RefreshCw, 
   ArrowUpRight, 
+  ArrowLeft,
   Layers,
   Award,
   ChevronRight
@@ -85,6 +87,24 @@ const DashboardView = () => {
   useEffect(() => {
     fetchDashboard();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedCard(null);
+      }
+    };
+    if (selectedCard) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [selectedCard]);
 
   const cards = dashboardData?.cards || [];
   const userRoles = dashboardData?.roles || [];
@@ -216,100 +236,125 @@ const DashboardView = () => {
         </div>
       </div>
 
-      {/* ─── INTERACTIVE DRILLDOWN MODAL ────────────────────────────────────── */}
-      {selectedCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-[#090909] border border-[#2B2B2B] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            
-            {/* Modal Header */}
-            <div className="p-4 bg-[#0E0E0E] border-b border-[#202020] flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 ${colorStyles[selectedCard.color]?.topBar || 'bg-blue-500'}`} />
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    {selectedCard.label} — Drill-Down Records
-                  </h3>
-                </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5">
-                  Showing all underlying transactions &amp; details ({drillItems.length} total entries)
-                </p>
-              </div>
+      {/* ─── FULL-WINDOW INTERACTIVE DRILLDOWN WORKSTATION (Portal) ─────────── */}
+      {selectedCard && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-[#000000] flex flex-col w-screen h-screen overflow-hidden font-mono">
+          
+          {/* Compact Header Bar */}
+          <div className="px-4 sm:px-6 py-3 bg-[#0A0A0A] border-b border-[#202020] flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedCard(null)}
+                className="px-3 py-1.5 bg-[#121212] hover:bg-[#1C1C1C] text-zinc-300 hover:text-white border border-[#2B2B2B] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
+                title="Back to Dashboard [Esc]"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back</span>
+              </button>
 
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 shrink-0 ${colorStyles[selectedCard.color]?.topBar || 'bg-blue-500'}`} />
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider truncate">
+                  {selectedCard.label}
+                </h2>
+                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-[#161616] text-zinc-300 border border-[#2A2A2A] shrink-0">
+                  {drillItems.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="px-3 py-1.5 bg-[#101010] border border-[#242424] text-xs text-zinc-400 items-center gap-1.5 hidden sm:flex">
+                <span>Total:</span>
+                <strong className="text-white text-sm">{selectedCard.value}</strong>
+              </div>
               <button
                 onClick={() => setSelectedCard(null)}
-                className="p-1 text-zinc-500 hover:text-white cursor-pointer"
+                className="p-1.5 text-zinc-500 hover:text-white bg-[#141414] hover:bg-[#1E1E1E] border border-[#2A2A2A] cursor-pointer transition-colors"
+                title="Close [Esc]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
-            {/* Search filter in modal */}
-            <div className="p-3 border-b border-[#181818] bg-black">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={drillSearch}
-                  onChange={(e) => setDrillSearch(e.target.value)}
-                  placeholder="Filter records by client, description, or detail..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-[#0A0A0A] border border-[#222222] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-white"
-                />
-              </div>
+          {/* Search Bar */}
+          <div className="px-4 sm:px-6 py-2 border-b border-[#1A1A1A] bg-[#050505] flex items-center justify-between gap-3 shrink-0">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2" />
+              <input
+                type="text"
+                value={drillSearch}
+                onChange={(e) => setDrillSearch(e.target.value)}
+                placeholder="Search records..."
+                className="w-full pl-8 pr-3 py-1.5 bg-[#000000] border border-[#262626] text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+                autoFocus
+              />
             </div>
+            <span className="text-[11px] text-zinc-500 shrink-0">
+              <strong className="text-zinc-300">{filteredDrill.length}</strong> / {drillItems.length}
+            </span>
+          </div>
 
-            {/* Scrollable Records List */}
-            <div className="flex-1 overflow-y-auto divide-y divide-[#151515] p-2">
+          {/* Records Stream */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 space-y-1.5 bg-[#000000]">
+            <div className="max-w-[1600px] mx-auto space-y-1.5">
               {filteredDrill.length > 0 ? (
                 filteredDrill.map((rec, i) => (
-                  <div key={i} className="p-3 hover:bg-[#111111] transition-colors flex items-center justify-between gap-3 text-xs">
+                  <div 
+                    key={i} 
+                    className="px-4 py-3 bg-[#080808] hover:bg-[#0E0E0E] border border-[#1E1E1E] hover:border-[#333333] transition-all flex items-center justify-between gap-3 text-xs"
+                  >
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white truncate flex items-center gap-2">
+                      <div className="text-sm font-bold text-white truncate flex items-center gap-2">
                         <span>{rec.title}</span>
                         {rec.status && (
-                          <span className="px-1.5 py-0.2 bg-[#1A1A1A] border border-[#2A2A2A] text-[9px] text-zinc-400 uppercase">
+                          <span className="px-1.5 py-0.5 bg-[#141414] border border-[#2A2A2A] text-[10px] text-zinc-300 uppercase font-bold tracking-wider shrink-0">
                             {rec.status}
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-zinc-500 truncate mt-0.5">
+                      <div className="text-xs text-zinc-500 truncate mt-0.5">
                         {rec.subtitle}
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-bold text-emerald-400">
+                    <div className="text-right shrink-0 flex flex-col items-end">
+                      <div className="text-sm font-bold font-mono text-emerald-400">
                         {rec.amount}
                       </div>
                       {rec.date && (
-                        <div className="text-[10px] text-zinc-500 mt-0.5">
-                          {new Date(rec.date).toLocaleDateString()}
+                        <div className="text-[10px] text-zinc-500 font-mono">
+                          {new Date(rec.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                         </div>
                       )}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="p-12 text-center text-zinc-500 text-xs">
+                <div className="p-12 text-center text-zinc-500 text-xs bg-[#080808] border border-[#1E1E1E]">
                   No records match the filter criteria.
                 </div>
               )}
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 bg-[#0E0E0E] border-t border-[#202020] flex items-center justify-between text-xs">
-              <span className="text-zinc-500 text-[11px]">
-                Active Metric Total: <strong className="text-white">{selectedCard.value}</strong>
-              </span>
-              <button
-                onClick={() => setSelectedCard(null)}
-                className="px-4 py-1.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
-              >
-                Close Audit View
-              </button>
-            </div>
-
           </div>
-        </div>
+
+          {/* Slim Footer */}
+          <div className="px-4 sm:px-6 py-2 bg-[#0A0A0A] border-t border-[#202020] flex items-center justify-between text-xs shrink-0">
+            <span className="text-zinc-600 text-[10px]">
+              MegaTrix Technologies &bull; Audit Engine
+            </span>
+            <button
+              onClick={() => setSelectedCard(null)}
+              className="px-4 py-1 bg-white text-black hover:bg-zinc-200 text-[11px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+            >
+              Close [Esc]
+            </button>
+          </div>
+
+        </div>,
+        document.body
       )}
 
     </div>

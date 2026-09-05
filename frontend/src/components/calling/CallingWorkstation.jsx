@@ -6,6 +6,7 @@ import { ProductService } from '../../services/api';
 import RatingStars from '../common/RatingStars';
 import StatusBadge from '../common/StatusBadge';
 import ClipboardButton from '../common/ClipboardButton';
+import ManualLeadModal from '../crm/ManualLeadModal';
 import { 
   Phone, 
   Mail, 
@@ -33,11 +34,13 @@ import {
   Sparkles,
   Package,
   Percent,
-  DollarSign
+  DollarSign,
+  Plus
 } from 'lucide-react';
 
 const CallingWorkstation = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isSalesAgent, isCloser } = useAuth();
+  const canAddManualLead = isSalesAgent || isCloser;
   const { addToast } = useToast();
   const { 
     callingQueue, 
@@ -67,6 +70,7 @@ const CallingWorkstation = () => {
   const [saving, setSaving] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [selectedSwitchDatasetId, setSelectedSwitchDatasetId] = useState('');
+  const [isManualLeadModalOpen, setIsManualLeadModalOpen] = useState(false);
   
   // Product Catalog & Deal Selection state
   const [catalogProducts, setCatalogProducts] = useState([]);
@@ -517,9 +521,22 @@ const CallingWorkstation = () => {
                 Outbound Queue ({callingQueue.length})
               </h3>
             </div>
-            <span className="text-[11px] text-zinc-400">
-              #{activeQueueIndex + 1} of {callingQueue.length}
-            </span>
+            <div className="flex items-center gap-2">
+              {canAddManualLead && (
+                <button
+                  type="button"
+                  onClick={() => setIsManualLeadModalOpen(true)}
+                  className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                  title="Add a new lead manually"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Lead</span>
+                </button>
+              )}
+              <span className="text-[11px] text-zinc-400">
+                #{activeQueueIndex + 1} of {callingQueue.length}
+              </span>
+            </div>
           </div>
 
           <div className="relative">
@@ -1060,8 +1077,8 @@ const CallingWorkstation = () => {
 
       {/* ─── DATASET PROGRESSION / COMPLETION HUB (EXECUTIVE CLEAN UX) ───────── */}
       {showCompletionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
-          <div className="bg-[#080808] border border-[#2B2B2B] w-full max-w-2xl p-6 sm:p-7 shadow-2xl space-y-6 relative">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
+          <div className="bg-[#080808] border border-[#2B2B2B] w-full max-w-3xl lg:max-w-4xl p-6 sm:p-8 shadow-2xl space-y-6 relative">
             
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[#1E1E1E] pb-4">
@@ -1199,6 +1216,19 @@ const CallingWorkstation = () => {
           </div>
         </div>
       )}
+
+      {/* ─── MANUAL LEAD CREATION MODAL ────────────────────────────────────── */}
+      <ManualLeadModal
+        isOpen={isManualLeadModalOpen}
+        onClose={() => setIsManualLeadModalOpen(false)}
+        onSuccess={() => {
+          if (activeDatasetId) {
+            loadDatasetQueue(activeDatasetId);
+          }
+        }}
+        initialDatasetId={activeDatasetId}
+        defaultStatus="Uncontacted"
+      />
 
     </div>
   );

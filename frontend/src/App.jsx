@@ -176,7 +176,7 @@ function App() {
 
       {/* Minimal Clean Footer */}
       <footer className="w-full border-t border-[#1C1C1C] bg-[#050505] py-4 px-6 text-center text-xs font-mono text-zinc-500 flex items-center justify-center max-w-[1600px] mx-auto">
-        <span>MegaTrix LeadEngine — a Product of MegaTrix Technologies © 2026</span>
+        <span>MegaTrix Technologies — Customer Relationship Manager &copy; 2026</span>
       </footer>
 
     </div>

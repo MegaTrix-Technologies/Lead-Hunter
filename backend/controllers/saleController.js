@@ -3,26 +3,84 @@ const Lead = require('../models/Lead');
 const Project = require('../models/Project');
 const User = require('../models/User');
 
+const isSuperAdminUser = (user) => {
+  if (!user) return false;
+  if (user.email === 'sales@megatrixai.com') return true;
+  if (user.role === 'superadmin') return true;
+  if (Array.isArray(user.roles) && user.roles.includes('super_admin')) return true;
+  return false;
+};
+
 /**
  * GET /api/sales/closer-queue
- * Queue of leads pending closer action (First-come, first-served)
+ * Queue of leads pending closer action (First-come, first-served) + Closer Follow-ups
  */
 exports.getCloserQueue = async (req, res) => {
   try {
-    const { search, category, area } = req.query;
+    const { search, category, area, tab } = req.query;
+    const user = req.user;
+    const isSuperAdmin = isSuperAdminUser(user);
 
-    const query = {
+    // Exclude leads that already have an active/completed Sale record
+    const existingSaleLeadIds = await Sale.distinct('leadId', { leadId: { $ne: null } });
+    const excludeFilter = existingSaleLeadIds.length > 0 ? { _id: { $nin: existingSaleLeadIds } } : {};
+
+    // Live counts for tabs
+    const poolCount = await Lead.countDocuments({
+      ...excludeFilter,
       callStatus: { $in: ['Lead', 'Lead / Sale'] }
-    };
+    });
+
+    const myFollowUpsCount = user ? await Lead.countDocuments({
+      ...excludeFilter,
+      callStatus: 'Closer Follow Up',
+      closerId: user._id
+    }) : 0;
+
+    const allFollowUpsCount = await Lead.countDocuments({
+      ...excludeFilter,
+      callStatus: 'Closer Follow Up'
+    });
+
+    const query = { ...excludeFilter };
+
+    if (tab === 'pool') {
+      query.callStatus = { $in: ['Lead', 'Lead / Sale'] };
+    } else if (tab === 'my_followups') {
+      query.callStatus = 'Closer Follow Up';
+      if (!isSuperAdmin && user) {
+        query.closerId = user._id;
+      }
+    } else if (tab === 'all_followups') {
+      query.callStatus = 'Closer Follow Up';
+    } else {
+      // Default: show pool + my follow-ups
+      if (isSuperAdmin) {
+        query.callStatus = { $in: ['Lead', 'Lead / Sale', 'Closer Follow Up'] };
+      } else if (user) {
+        query.$or = [
+          { callStatus: { $in: ['Lead', 'Lead / Sale'] } },
+          { callStatus: 'Closer Follow Up', closerId: user._id }
+        ];
+      } else {
+        query.callStatus = { $in: ['Lead', 'Lead / Sale'] };
+      }
+    }
 
     if (search) {
       const regex = new RegExp(search.trim(), 'i');
-      query.$or = [
+      const searchOr = [
         { businessName: regex },
         { phoneNumber: regex },
         { email: regex },
         { area: regex }
       ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchOr }];
+        delete query.$or;
+      } else {
+        query.$or = searchOr;
+      }
     }
 
     if (category && category !== 'ALL') {
@@ -33,12 +91,6 @@ exports.getCloserQueue = async (req, res) => {
       query.area = new RegExp(area, 'i');
     }
 
-    // Exclude leads that already have an active/completed Sale record
-    const existingSaleLeadIds = await Sale.distinct('leadId', { leadId: { $ne: null } });
-    if (existingSaleLeadIds.length > 0) {
-      query._id = { $nin: existingSaleLeadIds };
-    }
-
     const leads = await Lead.find(query)
       .sort({ updatedAt: -1, createdAt: -1 })
       .limit(100)
@@ -47,6 +99,11 @@ exports.getCloserQueue = async (req, res) => {
     res.json({
       success: true,
       count: leads.length,
+      counts: {
+        pool: poolCount,
+        myFollowUps: myFollowUpsCount,
+        allFollowUps: allFollowUpsCount
+      },
       data: leads
     });
   } catch (error) {
@@ -149,6 +206,8 @@ exports.closeLead = async (req, res) => {
 
       // Update lead state
       lead.callStatus = 'sale';
+      lead.closerId = closerUser._id;
+      lead.closerName = closerUser.name;
       lead.dealValue = totalAmount;
       lead.interestedProducts = cleanProducts;
       lead.callNotes.push({
@@ -166,11 +225,19 @@ exports.closeLead = async (req, res) => {
     }
 
     if (outcome === 'Follow Up') {
-      lead.callStatus = 'Follow Up';
-      if (followUpDate) lead.followUpDate = new Date(followUpDate);
+      lead.callStatus = 'Closer Follow Up';
+      lead.followUpType = 'sales_closer';
+      lead.closerId = closerUser._id;
+      lead.closerName = closerUser.name;
+      lead.followUpBy = closerUser._id;
+      lead.followUpByName = closerUser.name;
+      if (followUpDate) {
+        lead.followUpDate = new Date(followUpDate);
+        lead.closerFollowUpDate = new Date(followUpDate);
+      }
       if (notes) {
         lead.callNotes.push({
-          note: `[Closer Callback] ${notes.trim()}`,
+          note: `[Closer Callback Scheduled: ${followUpDate ? new Date(followUpDate).toLocaleString() : 'Pending Date'}] ${notes.trim()}`,
           author: closerUser.name,
           timestamp: new Date()
         });
@@ -191,15 +258,17 @@ exports.closeLead = async (req, res) => {
 
       return res.json({
         success: true,
-        message: `Follow-up scheduled by closer for "${lead.businessName}".`,
+        message: `Closer follow-up scheduled by ${closerUser.name} for "${lead.businessName}".`,
         data: lead
       });
     }
 
     if (outcome === 'Denied') {
-      lead.callStatus = 'Do Not Call';
+      lead.callStatus = 'denied';
+      lead.closerId = closerUser._id;
+      lead.closerName = closerUser.name;
       lead.callNotes.push({
-        note: `[Deal Declined/Denied] ${notes ? notes.trim() : 'Customer declined proposal.'}`,
+        note: `[Deal Declined/Denied by Closer: ${closerUser.name}] ${notes ? notes.trim() : 'Customer declined proposal.'}`,
         author: closerUser.name,
         timestamp: new Date()
       });
@@ -207,7 +276,7 @@ exports.closeLead = async (req, res) => {
 
       return res.json({
         success: true,
-        message: `Lead marked as Denied/Opted-Out.`,
+        message: `Lead marked as Denied by closer.`,
         data: lead
       });
     }

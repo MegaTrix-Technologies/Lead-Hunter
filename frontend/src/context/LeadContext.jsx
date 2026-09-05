@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LeadService, DatasetService, ScraperService, EmailService, AnalyticsService } from '../services/api';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 
 const LeadContext = createContext(null);
 
@@ -56,6 +57,7 @@ const getViewFromPath = (pathname) => {
 };
 
 export const LeadProvider = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
   const { addToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -139,17 +141,29 @@ export const LeadProvider = ({ children }) => {
   const [isDeliveryReportOpen, setIsDeliveryReportOpen] = useState(false);
 
   /**
-   * Fetch All Datasets
+   * Fetch All Datasets (scoped to current authenticated user)
    */
   const fetchDatasets = useCallback(async () => {
     setLoadingDatasets(true);
     try {
       const res = await DatasetService.getDatasets();
       if (res.data.success) {
-        setDatasets(res.data.data);
-        if (!activeDatasetId && res.data.data.length > 0) {
-          setActiveDatasetId(res.data.data[0]._id);
-          setActiveDataset(res.data.data[0]);
+        const list = res.data.data || [];
+        setDatasets(list);
+        if (list.length > 0) {
+          setActiveDatasetId(prev => {
+            const valid = list.find(d => d._id === prev);
+            if (valid) {
+              setActiveDataset(valid);
+              return prev;
+            }
+            setActiveDataset(list[0]);
+            return list[0]._id;
+          });
+        } else {
+          setActiveDatasetId(null);
+          setActiveDataset(null);
+          setCallingQueue([]);
         }
       }
     } catch (error) {
@@ -157,7 +171,7 @@ export const LeadProvider = ({ children }) => {
     } finally {
       setLoadingDatasets(false);
     }
-  }, [activeDatasetId]);
+  }, []);
 
   /**
    * Fetch leads with current filters and pagination
@@ -462,18 +476,23 @@ export const LeadProvider = ({ children }) => {
     }
   };
 
-  // Initial load - only prefetch if authenticated session exists
+  // Sync datasets and leads whenever the authenticated user session changes
   useEffect(() => {
-    try {
-      const session = localStorage.getItem('megatrix_auth_session');
-      if (session) {
-        fetchDatasets();
-        fetchLeads(1);
-      }
-    } catch (e) {
-      // Ignore localStorage access error
+    if (isAuthenticated && user?._id) {
+      setDatasets([]);
+      setActiveDatasetId(null);
+      setActiveDataset(null);
+      setCallingQueue([]);
+      fetchDatasets();
+      fetchLeads(1);
+    } else if (!isAuthenticated) {
+      setDatasets([]);
+      setActiveDatasetId(null);
+      setActiveDataset(null);
+      setCallingQueue([]);
+      setLeads([]);
     }
-  }, []);
+  }, [isAuthenticated, user?._id]);
 
   return (
     <LeadContext.Provider value={{

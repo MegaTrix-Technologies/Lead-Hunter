@@ -177,10 +177,10 @@ exports.getDashboardData = async (req, res) => {
 
       cards.push({
         id: 'agent_followups',
-        label: 'Active Follow Ups',
+        label: 'My Sales Follow-Ups',
         value: agentFollowUps.length,
         numericValue: agentFollowUps.length,
-        subtext: 'Scheduled Prospect Callbacks',
+        subtext: 'Scheduled Cold-Calling Callbacks',
         color: 'amber',
         drillDown: agentFollowUps.map(l => ({
           id: l._id,
@@ -188,7 +188,7 @@ exports.getDashboardData = async (req, res) => {
           subtitle: `${l.area} • Phone: ${l.phoneNumber || 'N/A'}`,
           amount: l.followUpDate ? `Callback: ${new Date(l.followUpDate).toLocaleDateString()}` : 'Scheduled',
           date: l.updatedAt,
-          status: 'Follow Up'
+          status: 'Agent Follow Up'
         }))
       });
 
@@ -212,47 +212,50 @@ exports.getDashboardData = async (req, res) => {
 
     // ─── SALES CLOSER METRICS ───────────────────────────────────────────────
     if (userRoles.includes('sales_closer')) {
+      const closerFollowUpQuery = { callStatus: 'Closer Follow Up' };
+      if (!isSuperAdmin) {
+        closerFollowUpQuery.closerId = user._id;
+      }
+
       const [closerSales, closerFollowUps, pendingPayments] = await Promise.all([
         Sale.find({ closedBy: user._id }).sort({ closedAt: -1 }).lean(),
-        Lead.find({ callStatus: 'Follow Up' }).sort({ followUpDate: 1 }).lean(),
+        Lead.find(closerFollowUpQuery).sort({ closerFollowUpDate: 1, followUpDate: 1 }).lean(),
         Sale.find({ closedBy: user._id, status: { $ne: 'payment_completed' } }).populate('leadId', 'businessName').lean()
       ]);
 
-      if (!userRoles.includes('sales_agent')) {
-        cards.push({
-          id: 'closer_sales',
-          label: 'Total Deals Closed',
-          value: closerSales.length,
-          numericValue: closerSales.length,
-          subtext: `Total Volume: PKR ${closerSales.reduce((s, d) => s + (d.totalAmount || 0), 0).toLocaleString()}`,
-          color: 'blue',
-          drillDown: closerSales.map(s => ({
-            id: s._id,
-            title: s.customer?.businessName || 'Deal',
-            subtitle: `Lead Gen: ${s.leadGeneratedByName}`,
-            amount: `PKR ${s.totalAmount.toLocaleString()}`,
-            date: s.closedAt,
-            status: s.status
-          }))
-        });
+      cards.push({
+        id: 'closer_sales',
+        label: 'Total Deals Closed (Closer)',
+        value: closerSales.length,
+        numericValue: closerSales.length,
+        subtext: `Total Volume: PKR ${closerSales.reduce((s, d) => s + (d.totalAmount || 0), 0).toLocaleString()}`,
+        color: 'blue',
+        drillDown: closerSales.map(s => ({
+          id: s._id,
+          title: s.customer?.businessName || 'Deal',
+          subtitle: `Lead Gen: ${s.leadGeneratedByName}`,
+          amount: `PKR ${s.totalAmount.toLocaleString()}`,
+          date: s.closedAt,
+          status: s.status
+        }))
+      });
 
-        cards.push({
-          id: 'closer_followups',
-          label: 'Active Follow Ups',
-          value: closerFollowUps.length,
-          numericValue: closerFollowUps.length,
-          subtext: 'Callbacks in Queue',
-          color: 'amber',
-          drillDown: closerFollowUps.map(l => ({
-            id: l._id,
-            title: l.businessName,
-            subtitle: `${l.area} • Phone: ${l.phoneNumber || 'N/A'}`,
-            amount: l.followUpDate ? `Callback: ${new Date(l.followUpDate).toLocaleDateString()}` : 'Scheduled',
-            date: l.updatedAt,
-            status: 'Follow Up'
-          }))
-        });
-      }
+      cards.push({
+        id: 'closer_followups',
+        label: 'My Closer Follow-Ups',
+        value: closerFollowUps.length,
+        numericValue: closerFollowUps.length,
+        subtext: 'Closing Callbacks in Queue',
+        color: 'amber',
+        drillDown: closerFollowUps.map(l => ({
+          id: l._id,
+          title: l.businessName,
+          subtitle: `${l.area} • Phone: ${l.phoneNumber || 'N/A'}`,
+          amount: (l.closerFollowUpDate || l.followUpDate) ? `Callback: ${new Date(l.closerFollowUpDate || l.followUpDate).toLocaleDateString()}` : 'Scheduled',
+          date: l.updatedAt,
+          status: 'Closer Follow Up'
+        }))
+      });
 
       cards.push({
         id: 'closer_pending_payments',

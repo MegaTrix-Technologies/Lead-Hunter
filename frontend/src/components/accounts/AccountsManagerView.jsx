@@ -6,6 +6,7 @@ import AccountsOverviewTab from './AccountsOverviewTab';
 import SalesLedgerTab from './SalesLedgerTab';
 import ExpensesLedgerTab from './ExpensesLedgerTab';
 import FinancialReportTab from './FinancialReportTab';
+import ManualSaleModal from '../sales/ManualSaleModal';
 import { 
   Landmark, 
   BarChart3, 
@@ -38,6 +39,9 @@ const AccountsManagerView = () => {
 
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Manual Sale Modal State (Super Admin)
+  const [isManualSaleModalOpen, setIsManualSaleModalOpen] = useState(false);
 
   // Expense Creation Modal State
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -262,6 +266,16 @@ const AccountsManagerView = () => {
             <span>Export PDF</span>
           </button>
 
+          {/* Add Sale Button (Super Admin Only) */}
+          <button
+            onClick={() => setIsManualSaleModalOpen(true)}
+            className="px-3.5 py-2 bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Create direct sale and log inflow"
+          >
+            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Add Sale</span>
+          </button>
+
           {/* Add Expense Button */}
           <button
             onClick={() => setIsExpenseModalOpen(true)}
@@ -419,6 +433,7 @@ const AccountsManagerView = () => {
           {activeTab === 'sales' && (
             <SalesLedgerTab 
               periodParams={periodParams} 
+              onAddSale={() => setIsManualSaleModalOpen(true)}
             />
           )}
 
@@ -443,8 +458,8 @@ const AccountsManagerView = () => {
 
       {/* ─── ADD EXPENSE MODAL ──────────────────────────────────────────────── */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
-          <form onSubmit={handleCreateExpense} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-lg shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
+          <form onSubmit={handleCreateExpense} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl shadow-2xl p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-[#202020] pb-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-rose-400" />
@@ -556,6 +571,13 @@ const AccountsManagerView = () => {
           </form>
         </div>
       )}
+
+      {/* ─── MANUAL SALE MODAL (SUPER ADMIN ONLY) ───────────────────────── */}
+      <ManualSaleModal
+        isOpen={isManualSaleModalOpen}
+        onClose={() => setIsManualSaleModalOpen(false)}
+        onSuccess={fetchSummary}
+      />
 
     </div>
   );
