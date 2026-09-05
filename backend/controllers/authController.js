@@ -31,8 +31,10 @@ exports.seedSuperAdmin = async () => {
         dailyGmbLimit: 999999
       });
       console.log('✔ Default Super Admin initialized.');
-    } else if (!admin.roles || admin.roles.length === 0) {
+    } else if (!admin.roles || !admin.roles.includes('super_admin')) {
       admin.roles = ['super_admin'];
+      admin.role = 'superadmin';
+      admin.markModified('roles');
       await admin.save();
     }
 

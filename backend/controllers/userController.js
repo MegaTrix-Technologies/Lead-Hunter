@@ -22,10 +22,13 @@ exports.getUsers = async (req, res) => {
           Lead.countDocuments({ extractedBy: u._id })
         ]);
 
-        const isSuperAdmin = u.roles ? u.roles.includes('super_admin') : u.role === 'superadmin';
+        const isSuperAdmin = u.email === 'sales@megatrixai.com' || (u.roles && u.roles.includes('super_admin')) || u.role === 'superadmin';
         const limit = u.dailyGmbLimit || 150;
         const remainingToday = isSuperAdmin ? 999999 : Math.max(0, limit - usedToday);
-        const userRoles = u.roles && u.roles.length > 0 ? u.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
+        let userRoles = u.roles && u.roles.length > 0 ? u.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
+        if (isSuperAdmin && !userRoles.includes('super_admin')) {
+          userRoles = ['super_admin', ...userRoles.filter(r => r !== 'super_admin')];
+        }
 
         return {
           id: u._id,
@@ -81,9 +84,9 @@ exports.createUser = async (req, res) => {
     const limit = parseInt(dailyGmbLimit, 10);
     const assignedRoles = Array.isArray(roles) && roles.length > 0 ? roles : ['sales_agent'];
     const rates = {
-      leadGenPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.leadGenPercent) || 0)),
-      closerPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.closerPercent) || 0)),
-      developerPercent: Math.min(100, Math.max(0, parseFloat(commissionRates?.developerPercent) || 0))
+      leadGenPercent: assignedRoles.includes('sales_agent') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.leadGenPercent) || 0)) : 0,
+      closerPercent: assignedRoles.includes('sales_closer') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.closerPercent) || 0)) : 0,
+      developerPercent: assignedRoles.includes('developer') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.developerPercent) || 0)) : 0
     };
 
     const user = await User.create({
@@ -134,7 +137,7 @@ exports.updateUser = async (req, res) => {
     }
 
     // Protect Super Admin from being blocked or downgraded
-    const isTargetSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
+    const isTargetSuperAdmin = user.email === 'sales@megatrixai.com' || (user.roles && user.roles.includes('super_admin')) || user.role === 'superadmin';
     if (isTargetSuperAdmin && status === 'blocked') {
       return res.status(400).json({
         success: false,
@@ -156,18 +159,28 @@ exports.updateUser = async (req, res) => {
       user.password = password.trim();
     }
     if (Array.isArray(roles) && roles.length > 0) {
-      // Don't remove super_admin from root super admin
-      if (user.email === 'sales@megatrixai.com' && !roles.includes('super_admin')) {
-        roles.push('super_admin');
+      let finalRoles = [...roles];
+      if (user.email === 'sales@megatrixai.com' && !finalRoles.includes('super_admin')) {
+        finalRoles.unshift('super_admin');
       }
-      user.roles = roles;
+      user.roles = finalRoles;
+      user.role = finalRoles.includes('super_admin') ? 'superadmin' : 'agent';
+      user.markModified('roles');
     }
     if (commissionRates && typeof commissionRates === 'object') {
+      const assignedRoles = user.roles || [];
       user.commissionRates = {
-        leadGenPercent: commissionRates.leadGenPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.leadGenPercent) || 0)) : (user.commissionRates?.leadGenPercent || 0),
-        closerPercent: commissionRates.closerPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.closerPercent) || 0)) : (user.commissionRates?.closerPercent || 0),
-        developerPercent: commissionRates.developerPercent !== undefined ? Math.min(100, Math.max(0, parseFloat(commissionRates.developerPercent) || 0)) : (user.commissionRates?.developerPercent || 0)
+        leadGenPercent: assignedRoles.includes('sales_agent') && commissionRates.leadGenPercent !== undefined 
+          ? Math.min(100, Math.max(0, parseFloat(commissionRates.leadGenPercent) || 0)) 
+          : (assignedRoles.includes('sales_agent') ? (user.commissionRates?.leadGenPercent || 0) : 0),
+        closerPercent: assignedRoles.includes('sales_closer') && commissionRates.closerPercent !== undefined 
+          ? Math.min(100, Math.max(0, parseFloat(commissionRates.closerPercent) || 0)) 
+          : (assignedRoles.includes('sales_closer') ? (user.commissionRates?.closerPercent || 0) : 0),
+        developerPercent: assignedRoles.includes('developer') && commissionRates.developerPercent !== undefined 
+          ? Math.min(100, Math.max(0, parseFloat(commissionRates.developerPercent) || 0)) 
+          : (assignedRoles.includes('developer') ? (user.commissionRates?.developerPercent || 0) : 0)
       };
+      user.markModified('commissionRates');
     }
 
     await user.save();
