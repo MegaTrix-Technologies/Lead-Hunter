@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Mail, Eye, EyeOff, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react';
+import { Mail, Eye, EyeOff, ShieldCheck, ArrowRight, KeyRound, Info, X } from 'lucide-react';
 
 const LoginPage = () => {
   const { login, loading } = useAuth();
@@ -8,6 +8,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showResetNotice, setShowResetNotice] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -132,6 +133,17 @@ const LoginPage = () => {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+
+            {/* Reset Password Prompt */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setShowResetNotice(true)}
+                className="text-[11px] text-zinc-400 hover:text-white transition-colors cursor-pointer hover:underline"
+              >
+                Forgot / Reset Password?
+              </button>
+            </div>
           </div>
 
           {/* Sign In Button */}
@@ -170,6 +182,63 @@ const LoginPage = () => {
       <div className="mt-8 text-center text-xs text-zinc-600 font-mono">
         MegaTrix LeadEngine &amp; CRM &copy; 2026. All rights reserved.
       </div>
+
+      {/* Password Reset Notice Modal */}
+      {showResetNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md bg-[#0D0D0D] border border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.2)] p-6 space-y-4 font-mono">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-blue-950/80 border border-blue-500/50 flex items-center justify-center text-blue-400">
+                  <Info className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Password Reset Notice
+                  </h2>
+                  <p className="text-[11px] text-zinc-400">
+                    MegaTrix Enterprise Access Policy
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetNotice(false)}
+                className="text-zinc-500 hover:text-white transition-colors cursor-pointer p-1"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Message Body */}
+            <div className="p-4 bg-[#050505] border border-[#222222] rounded space-y-3 text-xs leading-relaxed text-zinc-300">
+              <p className="font-semibold text-white">
+                If you want to change or reset your password, please contact the administrator.
+              </p>
+              <p className="text-zinc-400 text-[11px]">
+                For platform security, user password resets and credential assignments are centrally managed by system administrators.
+              </p>
+              <div className="pt-2 border-t border-[#1C1C1C] flex flex-col gap-1 text-[11px]">
+                <span className="text-zinc-500 uppercase tracking-wide">Administrator Contact:</span>
+                <span className="text-blue-400 font-bold select-all">sales@megatrixai.com</span>
+              </div>
+            </div>
+
+            {/* Action */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowResetNotice(false)}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Understood &bull; Back to Sign In
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

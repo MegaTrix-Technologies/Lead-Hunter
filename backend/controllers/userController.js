@@ -98,6 +98,7 @@ exports.createUser = async (req, res) => {
       commissionRates: rates,
       status: 'active',
       dailyGmbLimit: isNaN(limit) || limit < 1 ? 150 : limit,
+      mustChangePassword: true,
       createdBy: req.user._id
     });
 
@@ -114,6 +115,7 @@ exports.createUser = async (req, res) => {
         commissionRates: user.commissionRates,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit,
+        mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt
       }
     });
@@ -157,6 +159,7 @@ exports.updateUser = async (req, res) => {
     }
     if (password && password.trim().length >= 6) {
       user.password = password.trim();
+      user.mustChangePassword = true;
     }
     if (Array.isArray(roles) && roles.length > 0) {
       let finalRoles = [...roles];

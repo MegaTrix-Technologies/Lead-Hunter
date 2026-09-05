@@ -61,6 +61,14 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 150
   },
+  mustChangePassword: {
+    type: Boolean,
+    default: false
+  },
+  lastPasswordChangedAt: {
+    type: Date,
+    default: null
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

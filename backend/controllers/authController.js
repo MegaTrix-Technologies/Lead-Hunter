@@ -137,6 +137,7 @@ exports.login = async (req, res) => {
         roles: userRoles,
         commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         dailyGmbLimit: user.dailyGmbLimit,
+        mustChangePassword: Boolean(user.mustChangePassword),
         loginTime: new Date().toISOString()
       },
       quota: {
@@ -184,7 +185,8 @@ exports.getMe = async (req, res) => {
         roles: userRoles,
         commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         status: user.status,
-        dailyGmbLimit: user.dailyGmbLimit
+        dailyGmbLimit: user.dailyGmbLimit,
+        mustChangePassword: Boolean(user.mustChangePassword)
       },
       quota: {
         isSuperAdmin,
@@ -234,11 +236,14 @@ exports.changePassword = async (req, res) => {
     }
 
     user.password = newPassword;
+    user.mustChangePassword = false;
+    user.lastPasswordChangedAt = new Date();
     await user.save();
 
     res.json({
       success: true,
-      message: 'Portal password updated successfully. Please use your new password next time you log in.'
+      message: 'Portal password updated successfully. Please use your new password next time you log in.',
+      mustChangePassword: false
     });
   } catch (err) {
     console.error('[Auth Controller] changePassword error:', err);

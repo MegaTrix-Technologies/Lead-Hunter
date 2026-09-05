@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { useLead } from './context/LeadContext';
 import LoginPage from './components/auth/LoginPage';
+import ForcePasswordChangeModal from './components/auth/ForcePasswordChangeModal';
 import Navbar from './components/layout/Navbar';
 import ScraperControls from './components/scraper/ScraperControls';
 import DatasetList from './components/dataset/DatasetList';
@@ -23,7 +24,7 @@ import DeliveryReportModal from './components/email/DeliveryReportModal';
 import AppendSearchModal from './components/dataset/AppendSearchModal';
 
 function App() {
-  const { isAuthenticated, isSuperAdmin, isSalesAgent, isCloser, isDeveloper } = useAuth();
+  const { isAuthenticated, isSuperAdmin, isSalesAgent, isCloser, isDeveloper, user } = useAuth();
   const { activeView, setActiveView, setActiveDatasetId, fetchLeads, appendModalDataset, setAppendModalDataset } = useLead();
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,6 +64,11 @@ function App() {
   // If not logged in, display the secure login gateway
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  // Force first-time login password change
+  if (user?.mustChangePassword) {
+    return <ForcePasswordChangeModal />;
   }
 
   return (

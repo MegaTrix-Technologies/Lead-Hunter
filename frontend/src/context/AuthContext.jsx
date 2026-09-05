@@ -103,6 +103,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await AuthService.changePassword({ currentPassword, newPassword });
       if (res.data.success) {
+        const updatedUser = {
+          ...user,
+          mustChangePassword: false
+        };
+        setUser(updatedUser);
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedUser));
         addToast({
           title: 'Password Changed',
           message: res.data.message || 'Password updated successfully.',
