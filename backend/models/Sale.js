@@ -85,6 +85,31 @@ const SaleSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    default: null,
+    index: true
+  },
+  isProjectDelivered: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deliveryCompletedAt: {
+    type: Date,
+    default: null
+  },
+  paymentMethod: {
+    type: String,
+    default: 'Bank Transfer',
+    trim: true
+  },
+  paymentReference: {
+    type: String,
+    default: '',
+    trim: true
+  },
   closedAt: {
     type: Date,
     default: Date.now,

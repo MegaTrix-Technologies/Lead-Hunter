@@ -189,16 +189,27 @@ exports.completeProject = async (req, res) => {
 
     await project.save();
 
-    // Update linked sale status to 'project_completed' if it was advance_paid or project_active
+    // Update linked sale
     const sale = await Sale.findById(project.saleId);
-    if (sale && sale.status !== 'payment_completed') {
-      sale.status = 'project_completed';
+    let finalSaleCompleted = false;
+    if (sale) {
+      sale.isProjectDelivered = true;
+      sale.deliveryCompletedAt = new Date();
+      if (sale.remainingAmount === 0) {
+        sale.status = 'payment_completed';
+        finalSaleCompleted = true;
+      } else {
+        // Project delivered, but remaining cash collection is pending!
+        sale.status = 'project_completed';
+      }
       await sale.save();
     }
 
     res.json({
       success: true,
-      message: 'Project marked completed! Sale now awaiting final payment collection by closer.',
+      message: finalSaleCompleted
+        ? 'Project delivered and full payment was previously received. Sale is now fully Completed and commissions credited!'
+        : 'Project marked completed! Sale remains in progress until final payment collection is recorded by closer.',
       data: project
     });
   } catch (error) {

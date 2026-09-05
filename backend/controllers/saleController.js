@@ -12,7 +12,7 @@ exports.getCloserQueue = async (req, res) => {
     const { search, category, area } = req.query;
 
     const query = {
-      callStatus: { $in: ['Lead', 'Lead / Sale', 'sale', 'Shows Interest', 'Follow Up'] }
+      callStatus: { $in: ['Lead', 'Lead / Sale'] }
     };
 
     if (search) {
@@ -72,6 +72,7 @@ exports.closeLead = async (req, res) => {
     const closerUser = req.user;
 
     if (outcome === 'Completed') {
+      const { paymentMethod, paymentReference } = req.body;
       // Product selection is mandatory at closing
       if (!Array.isArray(products) || products.length === 0) {
         return res.status(400).json({
@@ -94,7 +95,8 @@ exports.closeLead = async (req, res) => {
       const totalAmount = cleanProducts.reduce((sum, p) => sum + p.finalPrice, 0);
       const cleanAdvance = Math.max(0, parseFloat(advanceAmount) || 0);
       const remainingAmount = Math.max(0, totalAmount - cleanAdvance);
-      const saleStatus = remainingAmount === 0 ? 'payment_completed' : 'advance_paid';
+      // Even if 100% paid upfront, the project is active/in progress until delivery!
+      const saleStatus = cleanAdvance > 0 ? 'advance_paid' : 'project_active';
 
       // Create Sale document
       const sale = await Sale.create({
@@ -118,10 +120,13 @@ exports.closeLead = async (req, res) => {
         advanceAmount: cleanAdvance,
         remainingAmount,
         status: saleStatus,
+        isProjectDelivered: false,
+        paymentMethod: paymentMethod || 'Bank Transfer',
+        paymentReference: paymentReference ? paymentReference.trim() : '',
         source: 'manual',
         notes: notes ? notes.trim() : '',
         closedAt: new Date(),
-        paymentCompletedAt: saleStatus === 'payment_completed' ? new Date() : null
+        paymentCompletedAt: remainingAmount === 0 ? new Date() : null
       });
 
       // Auto-instantiate an Active Project for execution
@@ -131,12 +136,16 @@ exports.closeLead = async (req, res) => {
         assignedDeveloperNames: [],
         status: 'active',
         deliveryNotes: [{
-          note: `Deal closed by ${closerUser.name}. Advance collected: PKR ${cleanAdvance.toLocaleString()} of PKR ${totalAmount.toLocaleString()}.`,
+          note: `Deal closed by ${closerUser.name}. Advance collected: PKR ${cleanAdvance.toLocaleString()} (${paymentMethod || 'Bank Transfer'}) of PKR ${totalAmount.toLocaleString()}. Remaining: PKR ${remainingAmount.toLocaleString()}`,
           author: closerUser.name,
           authorId: closerUser._id,
           timestamp: new Date()
         }]
       });
+
+      // Link project ID to sale
+      sale.projectId = project._id;
+      await sale.save();
 
       // Update lead state
       lead.callStatus = 'sale';
@@ -151,7 +160,7 @@ exports.closeLead = async (req, res) => {
 
       return res.status(201).json({
         success: true,
-        message: `Sale successfully completed for "${lead.businessName}". Active project created.`,
+        message: `Sale successfully recorded for "${lead.businessName}". Project instantiated in progress.`,
         data: { sale, project }
       });
     }
@@ -220,7 +229,11 @@ exports.getSales = async (req, res) => {
     const query = {};
 
     if (status && status !== 'ALL') {
-      query.status = status;
+      if (status === 'in_progress') {
+        query.status = { $ne: 'payment_completed' };
+      } else {
+        query.status = status;
+      }
     }
 
     if (startDate || endDate) {
@@ -324,7 +337,7 @@ exports.createManualSale = async (req, res) => {
     const cleanTotal = parseFloat(totalAmount) || products.reduce((sum, p) => sum + (Number(p.finalPrice) || 0), 0);
     const cleanAdvance = Math.max(0, parseFloat(advanceAmount) || 0);
     const remainingAmount = Math.max(0, cleanTotal - cleanAdvance);
-    const saleStatus = remainingAmount === 0 ? 'payment_completed' : 'advance_paid';
+    const saleStatus = cleanAdvance > 0 ? 'advance_paid' : 'project_active';
 
     // Resolve user names
     let genByName = 'Direct Inbound';
@@ -381,10 +394,11 @@ exports.createManualSale = async (req, res) => {
       advanceAmount: cleanAdvance,
       remainingAmount,
       status: saleStatus,
+      isProjectDelivered: false,
       source: 'manual',
       notes: notes ? notes.trim() : '',
       closedAt: new Date(),
-      paymentCompletedAt: saleStatus === 'payment_completed' ? new Date() : null
+      paymentCompletedAt: remainingAmount === 0 ? new Date() : null
     });
 
     // Auto-create Active Project
@@ -400,6 +414,9 @@ exports.createManualSale = async (req, res) => {
         timestamp: new Date()
       }]
     });
+
+    sale.projectId = project._id;
+    await sale.save();
 
     res.status(201).json({
       success: true,
@@ -419,23 +436,36 @@ exports.createManualSale = async (req, res) => {
 exports.collectFinalPayment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { paymentNotes } = req.body;
+    const { paymentNotes, paymentMethod, paymentReference } = req.body;
 
     const sale = await Sale.findById(id);
     if (!sale) {
       return res.status(404).json({ success: false, message: 'Sale not found.' });
     }
 
-    if (sale.status === 'payment_completed') {
-      return res.status(400).json({ success: false, message: 'This sale has already received full payment.' });
+    if (sale.remainingAmount === 0 && sale.status === 'payment_completed') {
+      return res.status(400).json({ success: false, message: 'This sale has already received full payment and is completed.' });
     }
 
     // Mark full payment collected
     const collectedRemaining = sale.remainingAmount;
     sale.advanceAmount = sale.totalAmount;
     sale.remainingAmount = 0;
-    sale.status = 'payment_completed';
     sale.paymentCompletedAt = new Date();
+    if (paymentMethod) sale.paymentMethod = paymentMethod;
+    if (paymentReference) sale.paymentReference = paymentReference;
+
+    // Check if the associated project is already delivered
+    const linkedProject = await Project.findOne({ saleId: sale._id });
+    const isDelivered = sale.isProjectDelivered || (linkedProject && linkedProject.status === 'completed');
+
+    if (isDelivered) {
+      sale.status = 'payment_completed';
+      sale.isProjectDelivered = true;
+    } else {
+      // Full payment is received, but project is still being delivered!
+      sale.status = 'project_active';
+    }
 
     if (paymentNotes) {
       sale.notes = sale.notes ? `${sale.notes}\n[Payment Finalized] ${paymentNotes.trim()}` : `[Payment Finalized] ${paymentNotes.trim()}`;
@@ -445,7 +475,9 @@ exports.collectFinalPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Final payment of PKR ${collectedRemaining.toLocaleString()} collected. Deal fully closed!`,
+      message: isDelivered 
+        ? `Final payment of PKR ${collectedRemaining.toLocaleString()} collected and project delivered. Deal marked Completed!` 
+        : `Final payment of PKR ${collectedRemaining.toLocaleString()} collected. Project is in progress; deal will complete upon delivery.`,
       data: sale
     });
   } catch (error) {

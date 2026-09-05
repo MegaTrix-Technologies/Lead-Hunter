@@ -143,6 +143,8 @@ exports.getDashboardData = async (req, res) => {
 
     // ─── SALES AGENT METRICS ────────────────────────────────────────────────
     if (userRoles.includes('sales_agent')) {
+      const existingSaleLeadIds = await Sale.distinct('leadId', { leadId: { $ne: null } });
+
       const [agentSales, agentFollowUps, agentProcessing] = await Promise.all([
         Sale.find({ leadGeneratedBy: user._id }).sort({ closedAt: -1 }).lean(),
         Lead.find({
@@ -150,8 +152,9 @@ exports.getDashboardData = async (req, res) => {
           callStatus: 'Follow Up'
         }).sort({ followUpDate: 1 }).lean(),
         Lead.find({
-          $or: [{ extractedBy: user._id }, { generatedBy: user._id }],
-          callStatus: { $nin: ['sale', 'Lead / Sale', 'Do Not Call', 'denied'] }
+          $or: [{ generatedBy: user._id }, { extractedBy: user._id }],
+          callStatus: { $in: ['Lead', 'Lead / Sale'] },
+          _id: { $nin: existingSaleLeadIds }
         }).sort({ updatedAt: -1 }).lean()
       ]);
 
@@ -191,10 +194,10 @@ exports.getDashboardData = async (req, res) => {
 
       cards.push({
         id: 'agent_processing',
-        label: 'Leads in Processing',
+        label: 'Qualified Leads in Processing',
         value: agentProcessing.length,
         numericValue: agentProcessing.length,
-        subtext: 'Unclosed Pipeline Contacts',
+        subtext: 'Disposed as Lead (Awaiting Closer)',
         color: 'purple',
         drillDown: agentProcessing.slice(0, 50).map(l => ({
           id: l._id,
@@ -202,7 +205,7 @@ exports.getDashboardData = async (req, res) => {
           subtitle: `${l.category} • ${l.area}`,
           amount: l.phoneNumber || 'No phone',
           date: l.updatedAt,
-          status: l.callStatus
+          status: 'Qualified Lead'
         }))
       });
     }

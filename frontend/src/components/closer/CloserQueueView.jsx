@@ -38,10 +38,20 @@ const CloserQueueView = () => {
   const [outcome, setOutcome] = useState('Completed'); // 'Completed' | 'Follow Up' | 'Denied'
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [advanceAmount, setAdvanceAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
+  const [paymentReference, setPaymentReference] = useState('');
   const [notes, setNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState('');
+
+  const handleSelectAdvancePreset = (pct) => {
+    if (pct === 100) {
+      setAdvanceAmount(totalDealValue);
+    } else {
+      setAdvanceAmount(Math.round((totalDealValue * pct) / 100));
+    }
+  };
 
   const fetchQueue = async () => {
     setLoading(true);
@@ -80,6 +90,8 @@ const CloserQueueView = () => {
     setNotes('');
     setFollowUpDate('');
     setValidationError('');
+    setPaymentMethod('Bank Transfer');
+    setPaymentReference('');
 
     // Pre-populate products if the sales agent selected any
     if (lead.interestedProducts && lead.interestedProducts.length > 0) {
@@ -171,6 +183,8 @@ const CloserQueueView = () => {
         outcome,
         products: selectedProducts,
         advanceAmount: parseFloat(advanceAmount) || 0,
+        paymentMethod,
+        paymentReference: paymentReference.trim(),
         notes: notes.trim(),
         followUpDate: outcome === 'Follow Up' ? followUpDate : undefined
       };
@@ -466,33 +480,161 @@ const CloserQueueView = () => {
                     })}
                   </div>
 
-                  {/* Deal Financial Calculation Summary */}
+                  {/* Deal Financial & Advance Payment Settlement Console */}
                   {selectedProducts.length > 0 && (
-                    <div className="p-3 bg-black border border-emerald-800/80 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">Total Sale Amount:</span>
-                        <span className="text-sm font-bold text-white font-mono">{formatPKR(totalDealValue)}</span>
+                    <div className="p-4 bg-black border-2 border-emerald-600/80 space-y-4 shadow-lg">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-950">
+                        <div>
+                          <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider block">Agreed Total Deal Value:</span>
+                          <span className="text-xl font-bold text-white font-mono">{formatPKR(totalDealValue)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-700">
+                            {selectedProducts.length} Offering(s) Configured
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-3 pt-2 border-t border-zinc-800">
-                        <label className="text-xs text-emerald-300 font-bold shrink-0">
-                          Sales Advance Collected (PKR):
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={totalDealValue}
-                          value={advanceAmount}
-                          onChange={(e) => setAdvanceAmount(e.target.value)}
-                          placeholder="e.g. 25000"
-                          className="w-40 px-2.5 py-1 bg-[#0A0A0A] border border-emerald-700 text-emerald-300 font-bold font-mono text-right focus:outline-none"
-                          required
-                        />
+                      {/* Advance Amount Selection Presets */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-emerald-300 font-bold uppercase flex items-center gap-1.5">
+                            <DollarSign className="w-4 h-4 text-emerald-400" />
+                            Select Advance Amount Paid by Client:
+                          </label>
+                          <span className="text-xs text-emerald-400 font-mono font-bold">
+                            {totalDealValue > 0 ? Math.round(((parseFloat(advanceAmount) || 0) / totalDealValue) * 100) : 0}% of Total
+                          </span>
+                        </div>
+
+                        {/* Quick Preset Buttons */}
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                          {[
+                            { pct: 100, label: '100% Full Cash' },
+                            { pct: 75, label: '75% Advance' },
+                            { pct: 50, label: '50% (Standard)' },
+                            { pct: 30, label: '30% Advance' },
+                            { pct: 25, label: '25% Advance' }
+                          ].map(preset => {
+                            const isCurrent = totalDealValue > 0 && Math.round((parseFloat(advanceAmount) || 0)) === Math.round((totalDealValue * preset.pct) / 100);
+                            return (
+                              <button
+                                key={preset.pct}
+                                type="button"
+                                onClick={() => handleSelectAdvancePreset(preset.pct)}
+                                className={`px-2.5 py-2 text-xs font-mono font-bold uppercase border transition-all cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-emerald-500 text-black border-emerald-300 shadow-md ring-1 ring-emerald-300'
+                                    : 'bg-[#101010] text-zinc-300 border-[#2A2A2A] hover:border-emerald-700 hover:text-white'
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Percentage Slider */}
+                        <div className="pt-2">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={totalDealValue > 0 ? Math.round(((parseFloat(advanceAmount) || 0) / totalDealValue) * 100) : 0}
+                            onChange={(e) => {
+                              const pct = parseInt(e.target.value) || 0;
+                              setAdvanceAmount(Math.round((totalDealValue * pct) / 100));
+                            }}
+                            className="w-full accent-emerald-500 bg-zinc-800 h-2 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Exact Amount Input Field */}
+                        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-2.5 text-zinc-500 text-xs font-mono font-bold">PKR</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={totalDealValue}
+                              value={advanceAmount}
+                              onChange={(e) => setAdvanceAmount(e.target.value)}
+                              placeholder="0"
+                              className="w-full pl-12 pr-4 py-2 bg-[#0A0A0A] border border-emerald-600 text-white font-bold font-mono text-sm focus:outline-none focus:border-emerald-400"
+                              required
+                            />
+                          </div>
+                          <span className="text-[11px] text-zinc-400 italic">
+                            Select preset above or type custom advance PKR
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-1 text-[11px]">
-                        <span className="text-zinc-500">Remaining Due to Collect on Delivery:</span>
-                        <span className="text-amber-300 font-bold font-mono">{formatPKR(remainingValue)}</span>
+                      {/* Dual Breakdown Summary Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        <div className="p-3 bg-[#061208] border border-emerald-800/80 space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-zinc-400 uppercase font-bold">
+                            <span>Advance Paid Now:</span>
+                            <span className="text-emerald-400">Immediate</span>
+                          </div>
+                          <div className="text-lg font-bold font-mono text-emerald-300">
+                            {formatPKR(advanceAmount)}
+                          </div>
+                          <div className="text-[10px] text-zinc-500">Credited to accounts ledger upon closing</div>
+                        </div>
+
+                        <div className={`p-3 border space-y-1 ${
+                          remainingValue > 0 
+                            ? 'bg-[#140E04] border-amber-800/80' 
+                            : 'bg-[#0E0614] border-purple-800/80'
+                        }`}>
+                          <div className="flex items-center justify-between text-[11px] text-zinc-400 uppercase font-bold">
+                            <span>Remaining Balance:</span>
+                            <span className={remainingValue > 0 ? 'text-amber-400' : 'text-purple-400 font-bold'}>
+                              {remainingValue > 0 ? 'Due on Delivery' : 'Zero Balance'}
+                            </span>
+                          </div>
+                          <div className={`text-lg font-bold font-mono ${remainingValue > 0 ? 'text-amber-300' : 'text-purple-300'}`}>
+                            {formatPKR(remainingValue)}
+                          </div>
+                          <div className="text-[10px] text-zinc-500">
+                            {remainingValue > 0 ? 'Collected by closer after project is delivered' : 'Full payment collected upfront'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Payment Method & Transaction Reference */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-zinc-800">
+                        <div>
+                          <label className="block text-[11px] text-zinc-400 uppercase font-bold mb-1">
+                            Payment Method:
+                          </label>
+                          <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-[#0A0A0A] border border-zinc-700 text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                          >
+                            <option value="Bank Transfer">Bank Transfer (Meezan / HBL / Alfalah)</option>
+                            <option value="JazzCash">JazzCash</option>
+                            <option value="EasyPaisa">EasyPaisa</option>
+                            <option value="Cash">Direct Cash Collection</option>
+                            <option value="Online / Card">Online / Debit / Credit Card</option>
+                            <option value="Cheque">Cross Cheque</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-400 uppercase font-bold mb-1">
+                            Transaction / Receipt Reference (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            value={paymentReference}
+                            onChange={(e) => setPaymentReference(e.target.value)}
+                            placeholder="e.g. TR-89342 or Cash receipt #12"
+                            className="w-full px-2.5 py-1.5 bg-[#0A0A0A] border border-zinc-700 text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}

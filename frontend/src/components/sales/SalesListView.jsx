@@ -25,11 +25,43 @@ import {
 
 const formatPKR = (num) => `PKR ${(Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-const statusBadges = {
-  advance_paid: { label: 'Advance Paid', color: 'bg-blue-950/40 border-blue-800 text-blue-300' },
-  project_active: { label: 'Project Active', color: 'bg-purple-950/40 border-purple-800 text-purple-300' },
-  project_completed: { label: 'Project Delivered', color: 'bg-yellow-950/40 border-yellow-800 text-yellow-300' },
-  payment_completed: { label: 'Fully Paid & Closed', color: 'bg-emerald-950/40 border-emerald-800 text-emerald-300 font-bold' }
+const getSaleStatusBadge = (s) => {
+  const isDelivered = s.isProjectDelivered || s.status === 'payment_completed';
+  const isFullyPaid = s.remainingAmount === 0;
+
+  // Fully Completed ONLY when BOTH project delivered AND full amount collected!
+  if (isDelivered && isFullyPaid) {
+    return {
+      label: 'Completed',
+      sublabel: 'Delivered & Fully Paid',
+      color: 'bg-emerald-950/60 border-emerald-500 text-emerald-300 font-bold'
+    };
+  }
+
+  // Project is delivered, but remaining cash is not yet collected:
+  if (isDelivered && !isFullyPaid) {
+    return {
+      label: 'In Progress',
+      sublabel: 'Delivered • Payment Pending',
+      color: 'bg-amber-950/60 border-amber-500 text-amber-300 font-bold'
+    };
+  }
+
+  // Full amount was collected upfront, but project is still being worked on:
+  if (!isDelivered && isFullyPaid) {
+    return {
+      label: 'In Progress',
+      sublabel: 'Paid • Delivery Pending',
+      color: 'bg-purple-950/60 border-purple-500 text-purple-300'
+    };
+  }
+
+  // Standard In Progress: in development with advance paid:
+  return {
+    label: 'In Progress',
+    sublabel: 'Active Delivery',
+    color: 'bg-blue-950/60 border-blue-500 text-blue-300'
+  };
 };
 
 const SalesListView = () => {
@@ -254,10 +286,9 @@ const SalesListView = () => {
         <div className="flex items-center gap-1.5 flex-wrap">
           {[
             { id: 'ALL', label: 'All Deals' },
-            { id: 'advance_paid', label: 'Advance Paid' },
-            { id: 'project_active', label: 'Project Active' },
-            { id: 'project_completed', label: 'Ready for Final Cash' },
-            { id: 'payment_completed', label: 'Fully Paid' }
+            { id: 'in_progress', label: 'In Progress' },
+            { id: 'project_completed', label: 'Delivered (Cash Due)' },
+            { id: 'payment_completed', label: 'Completed' }
           ].map(f => (
             <button
               key={f.id}
@@ -310,7 +341,7 @@ const SalesListView = () => {
               </thead>
               <tbody className="divide-y divide-[#141414]">
                 {sales.map(s => {
-                  const badge = statusBadges[s.status] || { label: s.status, color: 'bg-zinc-800 text-zinc-300' };
+                  const badge = getSaleStatusBadge(s);
                   const canCollect = s.remainingAmount > 0 && (isSuperAdmin || user?.roles?.includes('sales_closer'));
 
                   return (
@@ -330,10 +361,15 @@ const SalesListView = () => {
                       <td className="py-3.5 px-4 text-zinc-300">
                         {s.closedByName || 'Super Admin'}
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 border text-[10px] uppercase font-bold whitespace-nowrap ${badge.color}`}>
-                          {badge.label}
-                        </span>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className={`px-2 py-0.5 border text-[10px] uppercase font-bold whitespace-nowrap ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                          <span className="text-[9px] text-zinc-500 font-mono">
+                            {badge.sublabel}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-blue-400">
                         {formatPKR(s.advanceAmount)}

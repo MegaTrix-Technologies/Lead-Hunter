@@ -215,6 +215,15 @@ exports.updateCallStatus = async (req, res) => {
 
     if (callStatus) {
       updateDoc.callStatus = callStatus;
+      if (callStatus === 'Lead' || callStatus === 'Lead / Sale') {
+        updateDoc.callStatus = 'Lead';
+        updateDoc.status = 'lead';
+        if (req.user) {
+          updateDoc.generatedBy = req.user._id;
+          updateDoc.generatedByName = req.user.name;
+        }
+        updateDoc.disposedAt = new Date();
+      }
     }
 
     if (additionalInfo !== undefined) {

@@ -9,9 +9,11 @@ const calculateUserEarnings = async (user) => {
 
   const rates = user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 };
 
-  // Commission is credited ONLY on completed payment (as per requirement)
+  // Commission is credited ONLY on full payment AND project delivery (as per requirement)
   const completedSales = await Sale.find({
     status: 'payment_completed',
+    remainingAmount: 0,
+    isProjectDelivered: true,
     $or: [
       { leadGeneratedBy: user._id },
       { closedBy: user._id },
