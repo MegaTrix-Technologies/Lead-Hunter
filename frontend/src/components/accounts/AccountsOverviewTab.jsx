@@ -8,30 +8,88 @@ import {
   Briefcase,
   PieChart,
   BarChart2,
-  Calendar
+  Calendar,
+  Clock,
+  CheckCircle2,
+  HelpCircle
 } from 'lucide-react';
 
 const formatPKR = (num) => `PKR ${(Number(num) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 const AccountsOverviewTab = ({ summary, trend = [] }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [accountingBasis, setAccountingBasis] = useState('cash'); // 'cash' (Realized Inflow) or 'accrual' (Contract Bookings)
 
   if (!summary) return null;
 
-  const {
-    totalSales = 0,
-    salesCount = 0,
-    avgDealSize = 0,
-    totalExpenses = 0,
-    expenseCount = 0,
-    avgExpense = 0,
-    netProfit = 0,
-    profitMargin = 0,
-    salesByCategory = [],
-    expensesByCategory = []
-  } = summary;
+  // Defensive extraction of metrics supporting both dual-basis and legacy response formats
+  const totalSales = Number(summary.totalSales) || 0;
+  const salesCount = Number(summary.salesCount) || 0;
+  const totalExpenses = Number(summary.totalExpenses) || 0;
+  const expenseCount = Number(summary.expenseCount) || 0;
+  const avgExpense = Number(summary.avgExpense) || 0;
+  const netProfit = Number(summary.netProfit) || 0;
+  const profitMargin = Number(summary.profitMargin) || 0;
 
-  const isProfitable = netProfit >= 0;
+  // Cash Basis (Realized Inflow)
+  const realizedSales = summary.realizedSales !== undefined && summary.realizedSales !== null
+    ? Number(summary.realizedSales)
+    : totalSales;
+
+  const realizedNetProfit = summary.realizedNetProfit !== undefined && summary.realizedNetProfit !== null
+    ? Number(summary.realizedNetProfit)
+    : netProfit;
+
+  const realizedProfitMargin = summary.realizedProfitMargin !== undefined && summary.realizedProfitMargin !== null
+    ? Number(summary.realizedProfitMargin)
+    : profitMargin;
+
+  const avgCashCollected = summary.avgCashCollected !== undefined && summary.avgCashCollected !== null
+    ? Number(summary.avgCashCollected)
+    : (salesCount > 0 ? Math.round(realizedSales / salesCount) : 0);
+
+  // Accrual Basis (Contract Bookings)
+  const bookedSales = summary.bookedSales !== undefined && summary.bookedSales !== null
+    ? Number(summary.bookedSales)
+    : totalSales;
+
+  const projectedNetProfit = summary.projectedNetProfit !== undefined && summary.projectedNetProfit !== null
+    ? Number(summary.projectedNetProfit)
+    : netProfit;
+
+  const projectedProfitMargin = summary.projectedProfitMargin !== undefined && summary.projectedProfitMargin !== null
+    ? Number(summary.projectedProfitMargin)
+    : profitMargin;
+
+  const pendingReceivables = summary.pendingReceivables !== undefined && summary.pendingReceivables !== null
+    ? Number(summary.pendingReceivables)
+    : Math.max(0, bookedSales - realizedSales);
+
+  const avgDealSize = summary.avgDealSize !== undefined && summary.avgDealSize !== null
+    ? Number(summary.avgDealSize)
+    : (salesCount > 0 ? Math.round(bookedSales / salesCount) : 0);
+
+  const salesByCategory = summary.salesByCategory || [];
+  const expensesByCategory = summary.expensesByCategory || [];
+
+  // Active metrics according to accounting mode
+  const activeSales = accountingBasis === 'cash' ? realizedSales : bookedSales;
+  const activeNetProfit = accountingBasis === 'cash' ? realizedNetProfit : projectedNetProfit;
+  const activeProfitMargin = accountingBasis === 'cash' ? realizedProfitMargin : projectedProfitMargin;
+
+  const isProfitable = activeNetProfit >= 0;
+
+  // Helper for trend data depending on basis
+  const getTrendSalesVal = (t) => {
+    if (accountingBasis === 'cash') {
+      return t.realizedSales !== undefined && t.realizedSales !== null ? Number(t.realizedSales) : (Number(t.sales) || 0);
+    }
+    return t.bookedSales !== undefined && t.bookedSales !== null ? Number(t.bookedSales) : (Number(t.sales) || 0);
+  };
+
+  const getTrendProfitVal = (t) => {
+    return getTrendSalesVal(t) - (t.expenses || 0);
+  };
 
   // Compute SVG chart coordinates
   const chartHeight = 220;
@@ -39,7 +97,7 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
   const padding = 40;
 
   const maxVal = Math.max(
-    ...trend.map(t => Math.max(t.sales || 0, t.expenses || 0, Math.abs(t.netProfit || 0))),
+    ...trend.map(t => Math.max(getTrendSalesVal(t), t.expenses || 0, Math.abs(getTrendProfitVal(t)))),
     10000
   );
 
@@ -55,7 +113,7 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
   };
 
   const salesPath = trend.length > 1
-    ? trend.map((t, i) => `${i === 0 ? 'M' : 'L'} ${getX(i, trend.length)} ${getY(t.sales)}`).join(' ')
+    ? trend.map((t, i) => `${i === 0 ? 'M' : 'L'} ${getX(i, trend.length)} ${getY(getTrendSalesVal(t))}`).join(' ')
     : '';
 
   const expensesPath = trend.length > 1
@@ -65,28 +123,81 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
   return (
     <div className="space-y-6">
       
+      {/* ─── 0. ACCOUNTING BASIS STANDARD TOGGLE ───────────────────────────── */}
+      <div className="bg-[#0A0A0A] border border-[#222222] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">Accounting Standard:</span>
+            <span className={`text-[11px] font-mono px-2 py-0.5 border font-semibold uppercase ${
+              accountingBasis === 'cash' 
+                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                : 'bg-blue-950/60 border-blue-800 text-blue-300'
+            }`}>
+              {accountingBasis === 'cash' ? 'Cash Basis (Active Default)' : 'Accrual Basis (Contract Bookings)'}
+            </span>
+          </div>
+          <p className="text-[11px] text-zinc-400 font-mono mt-1">
+            {accountingBasis === 'cash'
+              ? 'Realized Cash Inflow: Revenue & profit recognize ONLY money actually received in the bank (advance/collected). Uncollected balance is tracked in Accounts Receivable.'
+              : 'Accrual / Contract Bookings: Revenue & profit recognize the total signed contract face value upon deal closing, regardless of pending cash collection.'}
+          </p>
+        </div>
+
+        {/* Toggle Buttons */}
+        <div className="flex items-center bg-[#050505] p-1 border border-[#2B2B2B] shrink-0 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={() => setAccountingBasis('cash')}
+            className={`px-3 py-1.5 text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
+              accountingBasis === 'cash'
+                ? 'bg-emerald-600 text-black shadow'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Cash Basis (Realized Inflow)
+          </button>
+          <button
+            type="button"
+            onClick={() => setAccountingBasis('accrual')}
+            className={`px-3 py-1.5 text-xs font-mono font-bold uppercase transition-all cursor-pointer ${
+              accountingBasis === 'accrual'
+                ? 'bg-blue-600 text-white shadow'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Accrual (Contract Bookings)
+          </button>
+        </div>
+      </div>
+
       {/* ─── 1. EXECUTIVE P&L METRIC CARDS ─────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         
-        {/* Total Sales Revenue */}
+        {/* Card 1: Sales Revenue (Cash Inflow vs Booked) */}
         <div className="p-4 bg-[#0A0A0A] border border-[#222222] relative overflow-hidden group hover:border-emerald-700/60 transition-colors">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-emerald-500" />
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-            <span className="uppercase tracking-wider font-semibold">Total Sales Revenue</span>
+            <span className="uppercase tracking-wider font-semibold">
+              {accountingBasis === 'cash' ? 'Realized Cash Inflow' : 'Gross Booked Sales'}
+            </span>
             <div className="p-1.5 bg-emerald-950/40 border border-emerald-800 text-emerald-400">
               <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="text-xl font-bold font-mono text-white mt-2">
-            {formatPKR(totalSales)}
+            {formatPKR(activeSales)}
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mt-2.5 pt-2 border-t border-[#1A1A1A]">
             <span>{salesCount} Closed Deals</span>
-            <span className="text-emerald-400 font-semibold">Avg: {formatPKR(avgDealSize)}</span>
+            <span className="text-emerald-400 font-semibold">
+              {accountingBasis === 'cash'
+                ? `Booked: ${formatPKR(bookedSales)}`
+                : `Realized: ${formatPKR(realizedSales)}`}
+            </span>
           </div>
         </div>
 
-        {/* Total Operational Expenses */}
+        {/* Card 2: Total Operational Expenses */}
         <div className="p-4 bg-[#0A0A0A] border border-[#222222] relative overflow-hidden group hover:border-rose-700/60 transition-colors">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-rose-500" />
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
@@ -104,13 +215,15 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
           </div>
         </div>
 
-        {/* Net Operating Profit */}
+        {/* Card 3: Net Operating Profit */}
         <div className={`p-4 bg-[#0A0A0A] border relative overflow-hidden transition-colors ${
           isProfitable ? 'border-emerald-900/50 hover:border-emerald-600' : 'border-rose-900/50 hover:border-rose-600'
         }`}>
           <div className={`absolute top-0 left-0 right-0 h-0.5 ${isProfitable ? 'bg-emerald-400' : 'bg-rose-400'}`} />
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-            <span className="uppercase tracking-wider font-semibold">Net Operating Profit</span>
+            <span className="uppercase tracking-wider font-semibold">
+              {accountingBasis === 'cash' ? 'Realized Net Cash Profit' : 'Projected Net Profit'}
+            </span>
             <div className={`p-1.5 border ${
               isProfitable ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-rose-950/40 border-rose-800 text-rose-400'
             }`}>
@@ -118,34 +231,88 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
             </div>
           </div>
           <div className={`text-xl font-bold font-mono mt-2 ${isProfitable ? 'text-emerald-300' : 'text-rose-300'}`}>
-            {formatPKR(netProfit)}
+            {formatPKR(activeNetProfit)}
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mt-2.5 pt-2 border-t border-[#1A1A1A]">
-            <span>Sales − Expenses</span>
+            <span>
+              {accountingBasis === 'cash' ? 'Inflow − Expenses' : 'Booked − Expenses'}
+            </span>
             <span className={`font-bold ${isProfitable ? 'text-emerald-400' : 'text-rose-400'}`}>
               {isProfitable ? 'Net Surplus' : 'Operating Deficit'}
             </span>
           </div>
         </div>
 
-        {/* Operating Profit Margin */}
-        <div className="p-4 bg-[#0A0A0A] border border-[#222222] relative overflow-hidden group hover:border-blue-700/60 transition-colors">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500" />
+        {/* Card 4: Accounts Receivable / Margin Rate */}
+        <div className="p-4 bg-[#0A0A0A] border border-[#222222] relative overflow-hidden group hover:border-amber-700/60 transition-colors">
+          <div className={`absolute top-0 left-0 right-0 h-0.5 ${accountingBasis === 'cash' ? 'bg-amber-500' : 'bg-blue-500'}`} />
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-            <span className="uppercase tracking-wider font-semibold">Profit Margin Rate</span>
-            <div className="p-1.5 bg-blue-950/40 border border-blue-800 text-blue-400">
-              <Percent className="w-3.5 h-3.5" />
+            <span className="uppercase tracking-wider font-semibold">
+              {accountingBasis === 'cash' ? 'Accounts Receivable' : 'Profit Margin Rate'}
+            </span>
+            <div className={`p-1.5 border ${
+              accountingBasis === 'cash'
+                ? 'bg-amber-950/40 border-amber-800 text-amber-400'
+                : 'bg-blue-950/40 border-blue-800 text-blue-400'
+            }`}>
+              {accountingBasis === 'cash' ? <Clock className="w-3.5 h-3.5" /> : <Percent className="w-3.5 h-3.5" />}
             </div>
           </div>
           <div className="text-xl font-bold font-mono text-white mt-2">
-            {profitMargin}%
+            {accountingBasis === 'cash' ? formatPKR(pendingReceivables) : `${activeProfitMargin}%`}
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mt-2.5 pt-2 border-t border-[#1A1A1A]">
-            <span>Net Profit / Revenue</span>
-            <span className="text-blue-400 font-semibold">{totalSales > 0 ? 'Evaluated' : 'N/A'}</span>
+            {accountingBasis === 'cash' ? (
+              <>
+                <span>Pending Collections</span>
+                <span className="text-amber-400 font-semibold">Margin: {activeProfitMargin}%</span>
+              </>
+            ) : (
+              <>
+                <span>Contract Margin</span>
+                <span className="text-zinc-300 font-semibold">Pending: {formatPKR(pendingReceivables)}</span>
+              </>
+            )}
           </div>
         </div>
 
+      </div>
+
+      {/* ─── 1.5 CASH FLOW & RECEIVABLES HEALTH METER ──────────────────────── */}
+      <div className="bg-[#0A0A0A] border border-[#222222] p-4 font-mono space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-white font-bold uppercase tracking-wider">Cash Collection &amp; Receivables Health</span>
+            <span className="text-[11px] text-zinc-500">
+              (Total Booked Pipeline: {formatPKR(bookedSales)})
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="text-emerald-400 font-bold flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              Cash In Bank: {formatPKR(realizedSales)} ({bookedSales > 0 ? ((realizedSales / bookedSales) * 100).toFixed(1) : 100}%)
+            </span>
+            <span className="text-zinc-600">|</span>
+            <span className="text-amber-400 font-bold flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              Pending Receivables: {formatPKR(pendingReceivables)} ({bookedSales > 0 ? ((pendingReceivables / bookedSales) * 100).toFixed(1) : 0}%)
+            </span>
+          </div>
+        </div>
+
+        {/* Visual Split Bar */}
+        <div className="w-full h-3 bg-[#141414] border border-[#222222] overflow-hidden flex">
+          <div 
+            className="h-full bg-emerald-500 transition-all duration-500" 
+            style={{ width: `${bookedSales > 0 ? Math.min(100, Math.max(0, (realizedSales / bookedSales) * 100)) : 100}%` }}
+            title={`Cash Realized: ${formatPKR(realizedSales)}`}
+          />
+          <div 
+            className="h-full bg-amber-500/80 transition-all duration-500" 
+            style={{ width: `${bookedSales > 0 ? Math.min(100, Math.max(0, (pendingReceivables / bookedSales) * 100)) : 0}%` }}
+            title={`Pending Receivables: ${formatPKR(pendingReceivables)}`}
+          />
+        </div>
       </div>
 
       {/* ─── 2. FINANCIAL TREND TIMELINE CHART ────────────────────────────── */}
@@ -154,10 +321,10 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
           <div>
             <h3 className="text-xs font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
               <span className="w-2 h-2 bg-blue-500 inline-block" />
-              Sales Revenue vs. Operating Expenses Trend
+              {accountingBasis === 'cash' ? 'Realized Cash Inflow' : 'Booked Sales'} vs. Operating Expenses Trend
             </h3>
             <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-              Period-over-period financial trajectory across the active reporting window.
+              Period-over-period financial trajectory ({accountingBasis === 'cash' ? 'Cash Basis' : 'Accrual Basis'}).
             </p>
           </div>
 
@@ -165,7 +332,9 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
           <div className="flex items-center gap-4 text-xs font-mono">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-emerald-400 inline-block" />
-              <span className="text-zinc-300">Sales (PKR)</span>
+              <span className="text-zinc-300">
+                {accountingBasis === 'cash' ? 'Cash Inflow (PKR)' : 'Booked Sales (PKR)'}
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-0.5 bg-rose-400 inline-block" />
@@ -237,7 +406,8 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
               {/* Data Points */}
               {trend.map((point, idx) => {
                 const x = getX(idx, trend.length);
-                const ySales = getY(point.sales || 0);
+                const salesVal = getTrendSalesVal(point);
+                const ySales = getY(salesVal);
                 const yExp = getY(point.expenses || 0);
                 const isHovered = hoveredPoint === idx;
 
@@ -294,13 +464,13 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
                   {trend[hoveredPoint].period}
                 </div>
                 <div className="text-emerald-400">
-                  Sales: {formatPKR(trend[hoveredPoint].sales || 0)}
+                  {accountingBasis === 'cash' ? 'Cash Inflow' : 'Booked Sales'}: {formatPKR(getTrendSalesVal(trend[hoveredPoint]))}
                 </div>
                 <div className="text-rose-400">
                   Expenses: {formatPKR(trend[hoveredPoint].expenses || 0)}
                 </div>
                 <div className="text-blue-400 font-bold pt-1 border-t border-[#222222]">
-                  Net Profit: {formatPKR(trend[hoveredPoint].netProfit || 0)}
+                  Net Profit: {formatPKR(getTrendProfitVal(trend[hoveredPoint]))}
                 </div>
               </div>
             )}
@@ -320,7 +490,7 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
           <div className="flex items-center justify-between pb-2 border-b border-[#1A1A1A]">
             <h3 className="text-xs font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
               <span className="w-2 h-2 bg-emerald-500 inline-block" />
-              Sales Inflow by Client Niche
+              {accountingBasis === 'cash' ? 'Cash Inflow by Client Niche' : 'Booked Value by Client Niche'}
             </h3>
             <span className="text-[11px] font-mono text-zinc-400">
               {salesByCategory.length} Industries
@@ -330,13 +500,15 @@ const AccountsOverviewTab = ({ summary, trend = [] }) => {
           {salesByCategory.length > 0 ? (
             <div className="space-y-3">
               {salesByCategory.map((cat, idx) => {
-                const share = totalSales > 0 ? ((cat.amount / totalSales) * 100).toFixed(1) : 0;
+                const catVal = accountingBasis === 'cash' ? (cat.amount || 0) : (cat.bookedAmount || cat.amount || 0);
+                const denom = accountingBasis === 'cash' ? activeSales : bookedSales;
+                const share = denom > 0 ? ((catVal / denom) * 100).toFixed(1) : 0;
                 return (
                   <div key={idx} className="space-y-1">
                     <div className="flex items-center justify-between text-xs font-mono">
                       <span className="text-zinc-200 font-medium truncate max-w-xs">{cat.category}</span>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-emerald-400 font-bold">{formatPKR(cat.amount)}</span>
+                        <span className="text-emerald-400 font-bold">{formatPKR(catVal)}</span>
                         <span className="text-zinc-400 w-12 text-right">{share}%</span>
                       </div>
                     </div>

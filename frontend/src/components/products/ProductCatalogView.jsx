@@ -14,7 +14,10 @@ import {
   X, 
   Check, 
   Loader2,
-  DollarSign
+  DollarSign,
+  Repeat,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -40,6 +43,7 @@ const ProductCatalogView = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedBillingType, setSelectedBillingType] = useState('ALL'); // 'ALL', 'one_time', 'monthly'
 
   // Modal states for Super Admin CRUD
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,6 +55,8 @@ const ProductCatalogView = () => {
   const [formData, setFormData] = useState({
     name: '',
     category: 'Web Development',
+    billingType: 'one_time',
+    defaultDurationMonths: 1,
     basePrice: '',
     maxDiscountPercent: 15,
     currency: 'PKR',
@@ -87,6 +93,8 @@ const ProductCatalogView = () => {
     setFormData({
       name: '',
       category: 'Web Development',
+      billingType: 'one_time',
+      defaultDurationMonths: 1,
       basePrice: '',
       maxDiscountPercent: 15,
       currency: 'PKR',
@@ -102,6 +110,8 @@ const ProductCatalogView = () => {
     setFormData({
       name: prod.name || '',
       category: prod.category || 'Web Development',
+      billingType: prod.billingType || 'one_time',
+      defaultDurationMonths: prod.defaultDurationMonths || 1,
       basePrice: prod.basePrice !== undefined ? prod.basePrice : '',
       maxDiscountPercent: prod.maxDiscountPercent !== undefined ? prod.maxDiscountPercent : 0,
       currency: prod.currency || 'PKR',
@@ -129,6 +139,8 @@ const ProductCatalogView = () => {
       const payload = {
         name: formData.name.trim(),
         category: formData.category,
+        billingType: formData.billingType,
+        defaultDurationMonths: Math.max(1, parseInt(formData.defaultDurationMonths, 10) || 1),
         basePrice: parseFloat(formData.basePrice),
         maxDiscountPercent: parseFloat(formData.maxDiscountPercent) || 0,
         currency: formData.currency || 'PKR',
@@ -167,13 +179,15 @@ const ProductCatalogView = () => {
     }
   };
 
-  // Filter products by search and category
+  // Filter products by search, category, and billing type
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategory === 'ALL' || p.category === selectedCategory;
+    const prodBilling = p.billingType || 'one_time';
+    const matchesBilling = selectedBillingType === 'ALL' || prodBilling === selectedBillingType;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesBilling && matchesSearch;
   });
 
   const getCategoryColor = (cat) => {
@@ -252,21 +266,62 @@ const ProductCatalogView = () => {
         </div>
       </div>
 
-      {/* Search & Category Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0A0A0A] p-3 border border-[#1E1E1E]">
-        <div className="relative flex-1 max-w-md">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search offerings by name, category, or deliverables..."
-            className="w-full pl-9 pr-3 py-2 bg-black border border-[#2B2B2B] text-white text-xs focus:border-white focus:outline-none placeholder:text-zinc-600"
-          />
-          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+      {/* Search & Filter Bar */}
+      <div className="bg-[#0A0A0A] p-3 border border-[#1E1E1E] space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search offerings by name, category, or deliverables..."
+              className="w-full pl-9 pr-3 py-2 bg-black border border-[#2B2B2B] text-white text-xs focus:border-white focus:outline-none placeholder:text-zinc-600"
+            />
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+          </div>
+
+          {/* Billing Type Selector Tabs */}
+          <div className="flex items-center bg-[#050505] p-1 border border-[#2B2B2B] shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedBillingType('ALL')}
+              className={`px-2.5 py-1 text-[11px] font-bold uppercase transition-colors cursor-pointer ${
+                selectedBillingType === 'ALL'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              All Models
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedBillingType('one_time')}
+              className={`px-2.5 py-1 text-[11px] font-bold uppercase transition-colors cursor-pointer ${
+                selectedBillingType === 'one_time'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              One-Time
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedBillingType('monthly')}
+              className={`px-2.5 py-1 text-[11px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 ${
+                selectedBillingType === 'monthly'
+                  ? 'bg-emerald-600 text-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Repeat className="w-3 h-3" />
+              <span>Monthly Retainers</span>
+            </button>
+          </div>
         </div>
 
         {/* Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 pt-1 border-t border-[#161616]">
           {CATEGORIES.map(cat => (
             <button
               key={cat}
@@ -294,8 +349,8 @@ const ProductCatalogView = () => {
           <Package className="w-8 h-8 text-zinc-600 mx-auto" />
           <div className="text-sm font-bold text-white uppercase">No Offerings Found</div>
           <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-            {searchQuery || selectedCategory !== 'ALL' 
-              ? 'No products match your current search or category filter.' 
+            {searchQuery || selectedCategory !== 'ALL' || selectedBillingType !== 'ALL'
+              ? 'No products match your current search, category, or billing model filter.' 
               : 'The product catalog is currently empty.'}
           </p>
           {isSuperAdmin && (
@@ -311,6 +366,7 @@ const ProductCatalogView = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProducts.map(prod => {
             const minAllowedPrice = Math.round(prod.basePrice * (1 - (prod.maxDiscountPercent || 0) / 100));
+            const isMonthly = prod.billingType === 'monthly';
 
             return (
               <div 
@@ -323,11 +379,23 @@ const ProductCatalogView = () => {
                     <span className={`text-[10px] font-bold px-2 py-0.5 border uppercase ${getCategoryColor(prod.category)}`}>
                       {prod.category}
                     </span>
-                    {!prod.isActive && (
-                      <span className="text-[10px] px-1.5 py-0.5 border border-red-800/60 bg-red-950/40 text-red-400">
-                        Inactive
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isMonthly ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 border border-emerald-500/60 bg-emerald-950/70 text-emerald-300 flex items-center gap-1">
+                          <Repeat className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>Monthly</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 border border-zinc-700 bg-[#121212] text-zinc-400">
+                          One-Time
+                        </span>
+                      )}
+                      {!prod.isActive && (
+                        <span className="text-[10px] px-1.5 py-0.5 border border-red-800/60 bg-red-950/40 text-red-400">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -342,10 +410,17 @@ const ProductCatalogView = () => {
                   {/* Pricing Box with Permitted Discount Variation */}
                   <div className="p-3.5 bg-black border border-[#1B1B1B] space-y-2">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Standard Base:</span>
-                      <span className="text-base font-bold text-white font-mono">
-                        {prod.currency} {prod.basePrice.toLocaleString()}
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                        {isMonthly ? 'Monthly Retainer:' : 'Standard Base:'}
                       </span>
+                      <div className="text-right">
+                        <span className="text-base font-bold text-white font-mono">
+                          {prod.currency} {prod.basePrice.toLocaleString()}
+                        </span>
+                        {isMonthly && (
+                          <span className="text-xs text-emerald-400 font-bold ml-1 font-mono">/ mo</span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="pt-2 border-t border-[#181818] flex items-center justify-between text-xs">
@@ -358,7 +433,7 @@ const ProductCatalogView = () => {
                       <div className="text-right">
                         <span className="text-[10px] text-zinc-500 block leading-none mb-0.5">Permitted Floor:</span>
                         <span className="text-xs font-bold text-emerald-400 font-mono">
-                          {prod.currency} {minAllowedPrice.toLocaleString()}
+                          {prod.currency} {minAllowedPrice.toLocaleString()} {isMonthly ? '/ mo' : ''}
                         </span>
                       </div>
                     </div>
@@ -453,6 +528,65 @@ const ProductCatalogView = () => {
 
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs font-mono">
               
+              {/* Billing Model Selection */}
+              <div className="space-y-1.5">
+                <label className="block text-zinc-400 uppercase text-[11px] font-bold">
+                  Billing Model &amp; Engagement Structure <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div
+                    onClick={() => setFormData({ ...formData, billingType: 'one_time' })}
+                    className={`p-3 border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formData.billingType === 'one_time'
+                        ? 'bg-blue-950/30 border-blue-500 text-white'
+                        : 'bg-[#080808] border-[#222222] text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="billingType"
+                      checked={formData.billingType === 'one_time'}
+                      onChange={() => setFormData({ ...formData, billingType: 'one_time' })}
+                      className="mt-0.5 accent-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-white">One-Time Project</div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Fixed agreed delivery contract with single milestone payout.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setFormData({ ...formData, billingType: 'monthly' })}
+                    className={`p-3 border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      formData.billingType === 'monthly'
+                        ? 'bg-emerald-950/30 border-emerald-500 text-white'
+                        : 'bg-[#080808] border-[#222222] text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="billingType"
+                      checked={formData.billingType === 'monthly'}
+                      onChange={() => setFormData({ ...formData, billingType: 'monthly' })}
+                      className="mt-0.5 accent-emerald-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-white flex items-center gap-1.5">
+                        <span>Monthly Retainer / Maintenance</span>
+                        <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 text-[9px] uppercase font-mono">
+                          Recurring
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Recurring monthly fee (e.g. maintenance, security, hosting, retainers).
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Name & Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -464,7 +598,7 @@ const ProductCatalogView = () => {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Custom Business Website"
+                    placeholder={formData.billingType === 'monthly' ? "e.g. Website Maintenance & Security" : "e.g. Custom Business Website"}
                     className="w-full px-3 py-2 bg-black border border-[#2B2B2B] text-white focus:border-white focus:outline-none"
                   />
                 </div>
@@ -489,13 +623,18 @@ const ProductCatalogView = () => {
               <div className="p-4 bg-black border border-[#222222] space-y-3">
                 <div className="text-[11px] text-zinc-400 uppercase font-bold flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                  Pricing &amp; Outreach Discount Settings
+                  <span>
+                    {formData.billingType === 'monthly' ? 'Monthly Retainer Pricing & Discount Floor' : 'Standard Pricing & Outreach Discount Settings'}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-zinc-400 uppercase text-[10px] mb-1">
-                      Base Standard Price ({formData.currency}) <span className="text-red-500">*</span>
+                      {formData.billingType === 'monthly' 
+                        ? `Monthly Fee Rate (${formData.currency} / month)` 
+                        : `Base Standard Price (${formData.currency})`
+                      } <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -503,7 +642,7 @@ const ProductCatalogView = () => {
                       min="0"
                       value={formData.basePrice}
                       onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                      placeholder="e.g. 15000"
+                      placeholder={formData.billingType === 'monthly' ? "e.g. 8000" : "e.g. 25000"}
                       className="w-full px-3 py-2 bg-[#0C0C0C] border border-[#2B2B2B] text-white text-sm font-bold focus:border-emerald-500 focus:outline-none"
                     />
                   </div>
@@ -529,10 +668,10 @@ const ProductCatalogView = () => {
                 {formData.basePrice && (
                   <div className="p-2.5 bg-[#121212] border border-zinc-800 text-[11px] flex items-center justify-between text-zinc-300">
                     <span>
-                      Formula: <strong className="text-white">{formData.currency} {Number(formData.basePrice).toLocaleString()}</strong> with up to <strong className="text-purple-300">{formData.maxDiscountPercent}%</strong> discount
+                      Formula: <strong className="text-white">{formData.currency} {Number(formData.basePrice).toLocaleString()} {formData.billingType === 'monthly' ? '/ month' : ''}</strong> with up to <strong className="text-purple-300">{formData.maxDiscountPercent}%</strong> discount
                     </span>
                     <span className="text-emerald-400 font-bold">
-                      Floor: {formData.currency} {Math.round(Number(formData.basePrice) * (1 - (Number(formData.maxDiscountPercent) || 0) / 100)).toLocaleString()}
+                      Floor: {formData.currency} {Math.round(Number(formData.basePrice) * (1 - (Number(formData.maxDiscountPercent) || 0) / 100)).toLocaleString()} {formData.billingType === 'monthly' ? '/ month' : ''}
                     </span>
                   </div>
                 )}

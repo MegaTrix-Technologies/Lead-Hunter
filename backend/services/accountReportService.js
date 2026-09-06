@@ -44,42 +44,60 @@ class AccountReportService {
     summarySheet.addRow([]);
 
     // KPI Cards Header
-    const kpiHeaderRow = summarySheet.addRow(['METRIC', 'AMOUNT (PKR)', 'RECORD COUNT', 'MARGIN / RATIO', 'STATUS']);
+    const kpiHeaderRow = summarySheet.addRow(['ACCOUNTING METRIC', 'AMOUNT (PKR)', 'RECORD COUNT', 'MARGIN / RATIO', 'ACCOUNTING BASIS']);
     kpiHeaderRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
     kpiHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
     kpiHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
     kpiHeaderRow.height = 26;
 
+    const realizedInflow = summary.realizedSales !== undefined ? summary.realizedSales : summary.totalSales;
+    const bookedTotal = summary.bookedSales !== undefined ? summary.bookedSales : summary.totalSales;
+    const pendingBalance = summary.pendingReceivables || 0;
+    const realizedProfit = summary.realizedNetProfit !== undefined ? summary.realizedNetProfit : summary.netProfit;
+    const projectedProfit = summary.projectedNetProfit !== undefined ? summary.projectedNetProfit : summary.netProfit;
+
     // KPI Rows
-    const salesRow = summarySheet.addRow(['Total Sales Revenue', summary.totalSales, summary.salesCount, '100.0%', 'Gross Inflow']);
+    const salesRow = summarySheet.addRow(['Realized Sales Revenue (Cash Inflow)', realizedInflow, summary.salesCount, '100.0%', 'Cash Basis (In Bank)']);
     salesRow.getCell(2).numFmt = '#,##0.00';
     salesRow.getCell(2).font = { bold: true, color: { argb: 'FF059669' } };
 
-    const expenseRow = summarySheet.addRow(['Total Operating Expenses', summary.totalExpenses, summary.expenseCount, summary.totalSales > 0 ? `${((summary.totalExpenses / summary.totalSales) * 100).toFixed(1)}%` : '0%', 'Operating Outflow']);
+    const bookedRow = summarySheet.addRow(['Gross Booked Sales (Contract Value)', bookedTotal, summary.salesCount, '—', 'Accrual Basis (Pipeline)']);
+    bookedRow.getCell(2).numFmt = '#,##0.00';
+    bookedRow.getCell(2).font = { bold: true, color: { argb: 'FF1E3A8A' } };
+
+    const recvRow = summarySheet.addRow(['Accounts Receivable (Pending)', pendingBalance, summary.salesCount, bookedTotal > 0 ? `${((pendingBalance / bookedTotal) * 100).toFixed(1)}%` : '0%', 'Pending Collection']);
+    recvRow.getCell(2).numFmt = '#,##0.00';
+    recvRow.getCell(2).font = { bold: true, color: { argb: 'FFD97706' } };
+
+    const expenseRow = summarySheet.addRow(['Total Operating Expenses', summary.totalExpenses, summary.expenseCount, realizedInflow > 0 ? `${((summary.totalExpenses / realizedInflow) * 100).toFixed(1)}%` : '0%', 'Operating Outflow']);
     expenseRow.getCell(2).numFmt = '#,##0.00';
     expenseRow.getCell(2).font = { bold: true, color: { argb: 'FFDC2626' } };
 
-    const netProfitRow = summarySheet.addRow(['Net Operating Profit', summary.netProfit, summary.salesCount + summary.expenseCount, `${summary.profitMargin}%`, summary.netProfit >= 0 ? 'Profitable' : 'Deficit']);
+    const netProfitRow = summarySheet.addRow(['Realized Net Profit (Cash Surplus)', realizedProfit, summary.salesCount + summary.expenseCount, `${summary.profitMargin}%`, realizedProfit >= 0 ? 'Surplus' : 'Deficit']);
     netProfitRow.getCell(2).numFmt = '#,##0.00';
-    netProfitRow.getCell(2).font = { bold: true, color: summary.netProfit >= 0 ? { argb: 'FF059669' } : { argb: 'FFDC2626' } };
+    netProfitRow.getCell(2).font = { bold: true, color: realizedProfit >= 0 ? { argb: 'FF059669' } : { argb: 'FFDC2626' } };
     netProfitRow.getCell(4).font = { bold: true };
+
+    const projectedProfitRow = summarySheet.addRow(['Projected Net Profit (Full Contracts)', projectedProfit, summary.salesCount + summary.expenseCount, summary.projectedProfitMargin ? `${summary.projectedProfitMargin}%` : '—', projectedProfit >= 0 ? 'Projected Surplus' : 'Deficit']);
+    projectedProfitRow.getCell(2).numFmt = '#,##0.00';
+    projectedProfitRow.getCell(2).font = { bold: true, color: { argb: 'FF3B82F6' } };
 
     summarySheet.addRow([]);
 
     // Category Breakdown Section
-    summarySheet.mergeCells('A8:E8');
-    const catHeaderCell = summarySheet.getCell('A8');
+    summarySheet.mergeCells('A11:E11');
+    const catHeaderCell = summarySheet.getCell('A11');
     catHeaderCell.value = 'OPERATIONAL EXPENSES BY CATEGORY';
     catHeaderCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
     catHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
     catHeaderCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-    summarySheet.getRow(8).height = 24;
+    summarySheet.getRow(11).height = 24;
 
     const catSubHeaderRow = summarySheet.addRow(['CATEGORY', 'EXPENSE AMOUNT (PKR)', 'SHARE OF TOTAL EXPENSES', '', '']);
     catSubHeaderRow.font = { name: 'Arial', size: 9, bold: true, color: { argb: 'FF475569' } };
     catSubHeaderRow.height = 20;
 
-    let catStartRow = 10;
+    let catStartRow = 13;
     (summary.expensesByCategory || []).forEach(cat => {
       const row = summarySheet.addRow([
         cat.category,
@@ -102,8 +120,11 @@ class AccountReportService {
       { header: 'Industry / Niche', key: 'category', width: 22 },
       { header: 'Commercial Area', key: 'area', width: 24 },
       { header: 'Closed By (Agent)', key: 'agent', width: 20 },
-      { header: 'Products Sold', key: 'products', width: 34 },
-      { header: 'Deal Amount (PKR)', key: 'amount', width: 20 }
+      { header: 'Products Sold', key: 'products', width: 32 },
+      { header: 'Contract Value (PKR)', key: 'contract', width: 22 },
+      { header: 'Cash Inflow (PKR)', key: 'inflow', width: 20 },
+      { header: 'Pending Balance (PKR)', key: 'balance', width: 22 },
+      { header: 'Status', key: 'status', width: 16 }
     ];
 
     const salesHeaderRow = salesSheet.getRow(1);
@@ -114,6 +135,10 @@ class AccountReportService {
 
     sales.forEach((s, idx) => {
       const prodsStr = (s.interestedProducts || []).map(p => `${p.name} (${p.finalPrice || p.basePrice})`).join(', ') || 'Direct Deal';
+      const contractVal = s.dealValue || 0;
+      const cashCollected = s.advanceAmount !== undefined ? s.advanceAmount : contractVal;
+      const balance = s.remainingAmount !== undefined ? s.remainingAmount : (contractVal - cashCollected);
+
       const row = salesSheet.addRow({
         date: s.date ? new Date(s.date).toLocaleDateString() : 'N/A',
         client: s.businessName || 'Unknown Client',
@@ -121,32 +146,45 @@ class AccountReportService {
         area: s.area || 'Lahore',
         agent: s.extractedByName || 'Sales Desk',
         products: prodsStr,
-        amount: s.dealValue || 0
+        contract: contractVal,
+        inflow: cashCollected,
+        balance: balance,
+        status: balance <= 0 ? 'Fully Paid' : 'Partial Advance'
       });
       row.height = 20;
       row.getCell(7).numFmt = '#,##0.00';
       row.getCell(7).alignment = { horizontal: 'right' };
+      row.getCell(8).numFmt = '#,##0.00';
+      row.getCell(8).alignment = { horizontal: 'right' };
+      row.getCell(9).numFmt = '#,##0.00';
+      row.getCell(9).alignment = { horizontal: 'right' };
       if (idx % 2 === 1) {
         row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
       }
     });
 
     // Bottom Totals Row for Sales
-    const salesTotalRowNum = sales.length + 2;
     const salesTotalRow = salesSheet.addRow([
-      'TOTAL SALES',
+      'TOTAL SALES PIPELINE',
       '',
       '',
       '',
       '',
       `${sales.length} Deals Closed`,
-      summary.totalSales
+      bookedTotal,
+      realizedInflow,
+      pendingBalance,
+      ''
     ]);
     salesTotalRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
     salesTotalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
     salesTotalRow.height = 24;
     salesTotalRow.getCell(7).numFmt = '#,##0.00';
     salesTotalRow.getCell(7).alignment = { horizontal: 'right' };
+    salesTotalRow.getCell(8).numFmt = '#,##0.00';
+    salesTotalRow.getCell(8).alignment = { horizontal: 'right' };
+    salesTotalRow.getCell(9).numFmt = '#,##0.00';
+    salesTotalRow.getCell(9).alignment = { horizontal: 'right' };
 
     // ─── SHEET 3: EXPENSES LEDGER ────────────────────────────────────────────
     const expenseSheet = workbook.addWorksheet('Expenses Ledger', {
@@ -246,12 +284,17 @@ class AccountReportService {
     let yPos = 125;
     doc.rect(36, yPos, 523, 50).fill('#F8FAFC').stroke('#CBD5E1');
 
+    const realizedInflow = summary.realizedSales !== undefined ? summary.realizedSales : summary.totalSales;
+    const bookedTotal = summary.bookedSales !== undefined ? summary.bookedSales : summary.totalSales;
+    const pendingBalance = summary.pendingReceivables || 0;
+    const realizedProfit = summary.realizedNetProfit !== undefined ? summary.realizedNetProfit : summary.netProfit;
+
     const metrics = [
-      { label: 'TOTAL SALES', value: formatPKR(summary.totalSales), color: '#059669' },
+      { label: 'REALIZED CASH', value: formatPKR(realizedInflow), color: '#059669' },
+      { label: 'BOOKED SALES', value: formatPKR(bookedTotal), color: '#1E3A8A' },
       { label: 'TOTAL EXPENSES', value: formatPKR(summary.totalExpenses), color: '#DC2626' },
-      { label: 'NET PROFIT', value: formatPKR(summary.netProfit), color: summary.netProfit >= 0 ? '#059669' : '#DC2626' },
-      { label: 'NET MARGIN', value: `${summary.profitMargin}%`, color: '#2563EB' },
-      { label: 'DEALS WON', value: `${summary.salesCount}`, color: '#0F172A' }
+      { label: 'REALIZED PROFIT', value: formatPKR(realizedProfit), color: realizedProfit >= 0 ? '#059669' : '#DC2626' },
+      { label: 'RECEIVABLES', value: formatPKR(pendingBalance), color: '#D97706' }
     ];
 
     const colWidth = 523 / metrics.length;
@@ -297,24 +340,30 @@ class AccountReportService {
     yPos += 16;
 
     doc.rect(36, yPos, 523, 20).fill('#1E3A8A');
-    doc.fillColor('#FFFFFF').fontSize(8).font('Helvetica-Bold')
-      .text('DATE', 44, yPos + 6)
-      .text('CLIENT / BUSINESS', 105, yPos + 6)
-      .text('INDUSTRY', 250, yPos + 6)
-      .text('CLOSED BY', 350, yPos + 6)
-      .text('DEAL VALUE', 450, yPos + 6, { width: 100, align: 'right' });
+    doc.fillColor('#FFFFFF').fontSize(7.5).font('Helvetica-Bold')
+      .text('DATE', 42, yPos + 6)
+      .text('CLIENT / BUSINESS', 98, yPos + 6)
+      .text('INDUSTRY', 220, yPos + 6)
+      .text('CONTRACT', 300, yPos + 6, { width: 75, align: 'right' })
+      .text('CASH INFLOW', 380, yPos + 6, { width: 80, align: 'right' })
+      .text('RECEIVABLE', 465, yPos + 6, { width: 85, align: 'right' });
     yPos += 20;
 
     const displaySales = sales.slice(0, 12);
     displaySales.forEach((s, idx) => {
       const fill = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      const contractVal = s.dealValue || 0;
+      const cashCollected = s.advanceAmount !== undefined ? s.advanceAmount : contractVal;
+      const balance = s.remainingAmount !== undefined ? s.remainingAmount : (contractVal - cashCollected);
+
       doc.rect(36, yPos, 523, 18).fill(fill);
       doc.fillColor('#1E293B').fontSize(7.5).font('Helvetica')
-        .text(s.date ? new Date(s.date).toLocaleDateString() : 'N/A', 44, yPos + 5)
-        .text(s.businessName || 'Client', 105, yPos + 5, { width: 140, ellipsis: true })
-        .text(s.category || 'General', 250, yPos + 5, { width: 95, ellipsis: true })
-        .text(s.extractedByName || 'Sales Desk', 350, yPos + 5, { width: 95, ellipsis: true })
-        .text(formatPKR(s.dealValue), 450, yPos + 5, { width: 100, align: 'right' });
+        .text(s.date ? new Date(s.date).toLocaleDateString() : 'N/A', 42, yPos + 5)
+        .text(s.businessName || 'Client', 98, yPos + 5, { width: 118, ellipsis: true })
+        .text(s.category || 'General', 220, yPos + 5, { width: 78, ellipsis: true })
+        .text(formatPKR(contractVal), 300, yPos + 5, { width: 75, align: 'right' })
+        .text(formatPKR(cashCollected), 380, yPos + 5, { width: 80, align: 'right' })
+        .text(formatPKR(balance), 465, yPos + 5, { width: 85, align: 'right' });
       yPos += 18;
     });
 

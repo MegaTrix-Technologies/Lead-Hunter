@@ -878,15 +878,22 @@ const CallingWorkstation = () => {
                               />
                               <div>
                                 <div className="text-xs font-bold text-white leading-snug">{prod.name}</div>
-                                <span className="text-[9px] px-1.5 py-0.2 border border-zinc-800 bg-[#121212] text-zinc-400 uppercase">
-                                  {prod.category}
-                                </span>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="text-[9px] px-1.5 py-0.2 border border-zinc-800 bg-[#121212] text-zinc-400 uppercase">
+                                    {prod.category}
+                                  </span>
+                                  {prod.billingType === 'monthly' && (
+                                    <span className="text-[9px] px-1.5 py-0.2 border border-cyan-800/80 bg-cyan-950/60 text-cyan-400 uppercase font-mono">
+                                      Monthly
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
                             <div className="text-right shrink-0">
                               <div className="text-xs font-bold font-mono text-white">
-                                {prod.currency} {prod.basePrice.toLocaleString()}
+                                {prod.currency} {prod.basePrice.toLocaleString()}{prod.billingType === 'monthly' ? '/mo' : ''}
                               </div>
                               {maxDisc > 0 && (
                                 <span className="text-[9px] text-purple-400 font-mono block">

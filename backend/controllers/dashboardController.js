@@ -25,23 +25,24 @@ exports.getDashboardData = async (req, res) => {
         Sale.find({ status: { $ne: 'payment_completed' } }).sort({ remainingAmount: -1 }).lean()
       ]);
 
-      const totalSalesAmt = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      const totalBookedAmt = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      const totalCollectedCash = sales.reduce((sum, s) => sum + (s.advanceAmount || 0), 0);
       const totalExpenseAmt = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-      const totalProfit = totalSalesAmt - totalExpenseAmt;
+      const realizedProfit = totalCollectedCash - totalExpenseAmt;
       const totalRemainingAmt = pendingSales.reduce((sum, s) => sum + (s.remainingAmount || 0), 0);
 
       cards.push({
         id: 'total_sales',
-        label: 'Total Sales Revenue',
-        value: `PKR ${totalSalesAmt.toLocaleString()}`,
-        numericValue: totalSalesAmt,
-        subtext: `${sales.length} Closed Deals`,
+        label: 'Realized Sales Inflow',
+        value: `PKR ${totalCollectedCash.toLocaleString()}`,
+        numericValue: totalCollectedCash,
+        subtext: `Cash in Bank • Booked: PKR ${totalBookedAmt.toLocaleString()}`,
         color: 'emerald',
         drillDown: sales.map(s => ({
           id: s._id,
           title: s.customer?.businessName || 'Deal',
           subtitle: `${s.customer?.area || ''} • Closed by ${s.closedByName}`,
-          amount: `PKR ${s.totalAmount.toLocaleString()}`,
+          amount: `Collected: PKR ${(s.advanceAmount || 0).toLocaleString()} / Total: PKR ${s.totalAmount.toLocaleString()}`,
           date: s.closedAt,
           status: s.status
         }))
@@ -49,13 +50,13 @@ exports.getDashboardData = async (req, res) => {
 
       cards.push({
         id: 'total_profit',
-        label: 'Net Operating Profit',
-        value: `PKR ${totalProfit.toLocaleString()}`,
-        numericValue: totalProfit,
-        subtext: `Sales − Expenses (Margin: ${totalSalesAmt > 0 ? ((totalProfit / totalSalesAmt) * 100).toFixed(1) : 0}%)`,
-        color: totalProfit >= 0 ? 'emerald' : 'rose',
+        label: 'Realized Net Cash Profit',
+        value: `PKR ${realizedProfit.toLocaleString()}`,
+        numericValue: realizedProfit,
+        subtext: `Cash Inflow − Expenses (Margin: ${totalCollectedCash > 0 ? ((realizedProfit / totalCollectedCash) * 100).toFixed(1) : 0}%)`,
+        color: realizedProfit >= 0 ? 'emerald' : 'rose',
         drillDown: [
-          { id: 'rev', title: 'Total Sales Revenue', subtitle: `${sales.length} transactions`, amount: `PKR ${totalSalesAmt.toLocaleString()}`, status: 'Inflow' },
+          { id: 'rev', title: 'Realized Cash Inflow', subtitle: `${sales.length} transactions`, amount: `PKR ${totalCollectedCash.toLocaleString()}`, status: 'Inflow' },
           { id: 'exp', title: 'Total Operating Outflow', subtitle: `${expenses.length} entries`, amount: `PKR ${totalExpenseAmt.toLocaleString()}`, status: 'Outflow' }
         ]
       });

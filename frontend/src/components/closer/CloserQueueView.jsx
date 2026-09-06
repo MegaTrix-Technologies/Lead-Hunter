@@ -233,6 +233,7 @@ const CloserQueueView = () => {
           productId: product._id,
           name: product.name,
           category: product.category,
+          billingType: product.billingType || 'one_time',
           basePrice: product.basePrice,
           discountPercent: 0,
           finalPrice: product.basePrice,
@@ -914,12 +915,19 @@ const CloserQueueView = () => {
                               />
                               <div>
                                 <div className="text-xs font-bold text-white">{prod.name}</div>
-                                <span className="text-[10px] text-zinc-500">{prod.category}</span>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="text-[10px] text-zinc-500">{prod.category}</span>
+                                  {prod.billingType === 'monthly' && (
+                                    <span className="text-[9px] px-1.5 py-0.2 border border-cyan-800/80 bg-cyan-950/60 text-cyan-400 uppercase font-mono">
+                                      Monthly
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className="text-right shrink-0">
                               <div className="text-xs font-bold font-mono text-white">
-                                {formatPKR(prod.basePrice)}
+                                {formatPKR(prod.basePrice)}{prod.billingType === 'monthly' ? '/mo' : ''}
                               </div>
                               {maxDisc > 0 && (
                                 <span className="text-[9px] text-purple-400 font-mono block">Max {maxDisc}% off</span>
@@ -1189,8 +1197,17 @@ const CloserQueueView = () => {
                                 : 'border-zinc-800 bg-black text-zinc-500 hover:border-zinc-600'
                             }`}
                           >
-                            <span className="truncate">{prod.name}</span>
-                            <span className="font-mono font-bold text-[10px] shrink-0 ml-2">{formatPKR(prod.basePrice)}</span>
+                            <span className="truncate flex items-center gap-1.5">
+                              <span>{prod.name}</span>
+                              {prod.billingType === 'monthly' && (
+                                <span className="text-[9px] px-1 border border-cyan-800 bg-cyan-950/80 text-cyan-400 font-mono uppercase">
+                                  mo
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-mono font-bold text-[10px] shrink-0 ml-2">
+                              {formatPKR(prod.basePrice)}{prod.billingType === 'monthly' ? '/mo' : ''}
+                            </span>
                           </div>
                         );
                       })}

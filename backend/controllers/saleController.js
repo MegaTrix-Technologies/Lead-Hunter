@@ -391,7 +391,10 @@ exports.createManualSale = async (req, res) => {
       assignedDevelopers,
       products,
       totalAmount,
+      agreedAdvanceAmount,
       advanceAmount,
+      advanceScheduleNotes,
+      isProjectDelivered,
       notes
     } = req.body;
 
@@ -403,10 +406,41 @@ exports.createManualSale = async (req, res) => {
       return res.status(400).json({ success: false, message: 'At least one product is required.' });
     }
 
+    const isDelivered = Boolean(isProjectDelivered);
     const cleanTotal = parseFloat(totalAmount) || products.reduce((sum, p) => sum + (Number(p.finalPrice) || 0), 0);
-    const cleanAdvance = Math.max(0, parseFloat(advanceAmount) || 0);
-    const remainingAmount = Math.max(0, cleanTotal - cleanAdvance);
-    const saleStatus = cleanAdvance > 0 ? 'advance_paid' : 'project_active';
+
+    let cleanAdvance = 0;
+    let cleanAgreedAdvance = 0;
+    let cleanPendingAdvance = 0;
+    let cleanCompletion = 0;
+    let remainingAmount = 0;
+    let saleStatus = 'project_active';
+    let deliveryCompletedAt = null;
+    let paymentCompletedAt = null;
+
+    if (isDelivered) {
+      // 100% full payment collected upfront and project already delivered
+      cleanAdvance = cleanTotal;
+      cleanAgreedAdvance = cleanTotal;
+      cleanPendingAdvance = 0;
+      cleanCompletion = 0;
+      remainingAmount = 0;
+      saleStatus = 'payment_completed';
+      deliveryCompletedAt = new Date();
+      paymentCompletedAt = new Date();
+    } else {
+      cleanAdvance = Math.max(0, parseFloat(advanceAmount) || 0);
+      cleanAgreedAdvance = agreedAdvanceAmount !== undefined && agreedAdvanceAmount !== ''
+        ? Math.max(0, parseFloat(agreedAdvanceAmount) || 0)
+        : cleanAdvance;
+      cleanPendingAdvance = Math.max(0, cleanAgreedAdvance - cleanAdvance);
+      cleanCompletion = Math.max(0, cleanTotal - cleanAgreedAdvance);
+      remainingAmount = Math.max(0, cleanTotal - cleanAdvance);
+      saleStatus = cleanAdvance > 0 ? 'advance_paid' : 'project_active';
+      if (remainingAmount === 0) {
+        paymentCompletedAt = new Date();
+      }
+    }
 
     // Resolve user names
     let genByName = 'Direct Inbound';
@@ -450,34 +484,52 @@ exports.createManualSale = async (req, res) => {
       closedByName: closerName,
       assignedDevelopers: validDevIds,
       assignedDeveloperNames: devNames,
-      products: products.map(p => ({
-        productId: p.productId || null,
-        name: p.name,
-        category: p.category || '',
-        basePrice: Number(p.basePrice) || 0,
-        discountPercent: Number(p.discountPercent) || 0,
-        finalPrice: Number(p.finalPrice) || Number(p.basePrice) || 0,
-        currency: p.currency || 'PKR'
-      })),
+      products: products.map(p => {
+        const bp = Number(p.basePrice) || 0;
+        const discAmt = Number(p.discountAmount) || 0;
+        const discPct = Number(p.discountPercent) || (bp > 0 ? Math.round((discAmt / bp) * 100) : 0);
+        const fp = Number(p.finalPrice) !== undefined && Number(p.finalPrice) !== 0 ? Number(p.finalPrice) : Math.max(0, bp - discAmt);
+        return {
+          productId: p.productId || null,
+          name: p.name,
+          category: p.category || '',
+          billingType: p.billingType === 'monthly' ? 'monthly' : 'one_time',
+          billingDurationMonths: Math.max(1, parseInt(p.billingDurationMonths, 10) || 1),
+          monthlyPrice: Number(p.monthlyPrice) || bp,
+          basePrice: bp,
+          discountAmount: discAmt,
+          discountPercent: discPct,
+          finalPrice: fp,
+          currency: p.currency || 'PKR'
+        };
+      }),
       totalAmount: cleanTotal,
+      agreedAdvanceAmount: cleanAgreedAdvance,
       advanceAmount: cleanAdvance,
+      pendingAdvanceAmount: cleanPendingAdvance,
+      completionAmount: cleanCompletion,
+      advanceScheduleNotes: advanceScheduleNotes ? advanceScheduleNotes.trim() : '',
       remainingAmount,
       status: saleStatus,
-      isProjectDelivered: false,
+      isProjectDelivered: isDelivered,
       source: 'manual',
       notes: notes ? notes.trim() : '',
       closedAt: new Date(),
-      paymentCompletedAt: remainingAmount === 0 ? new Date() : null
+      deliveryCompletedAt,
+      paymentCompletedAt
     });
 
-    // Auto-create Active Project
+    // Auto-create Project (Completed if already delivered, otherwise active)
     const project = await Project.create({
       saleId: sale._id,
       assignedDevelopers: validDevIds,
       assignedDeveloperNames: devNames,
-      status: 'active',
+      status: isDelivered ? 'completed' : 'active',
+      completedAt: isDelivered ? new Date() : null,
       deliveryNotes: [{
-        note: `Manual sale created by ${req.user.name}. Project ready for execution.`,
+        note: isDelivered
+          ? `Direct sale logged as already delivered by ${req.user.name}. 100% full amount (PKR ${cleanTotal.toLocaleString()}) collected.`
+          : `Manual sale created by ${req.user.name}. Advance collected: PKR ${cleanAdvance.toLocaleString()} / Agreed Advance: PKR ${cleanAgreedAdvance.toLocaleString()}${cleanPendingAdvance > 0 ? ` (Pending Advance: PKR ${cleanPendingAdvance.toLocaleString()})` : ''} / Due on completion: PKR ${cleanCompletion.toLocaleString()}.`,
         author: req.user.name,
         authorId: req.user._id,
         timestamp: new Date()

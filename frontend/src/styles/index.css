@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  /* High-contrast text selection for dark backgrounds */
+  ::selection {
+    background-color: rgba(16, 185, 129, 0.4);
+    color: #FFFFFF;
+  }
+
   :root {
     --bg-primary: #000000;
     --surface-1: #0A0A0A;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SaleService, ProductService, UserService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import ManualSaleModal from './ManualSaleModal';
 import { 
   DollarSign, 
   Search, 
@@ -74,24 +75,8 @@ const SalesListView = () => {
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
 
-  // Manual Sale Modal
+  // Manual Sale Modal state
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({
-    businessName: '',
-    phoneNumber: '',
-    email: '',
-    area: 'Gulberg, Lahore',
-    category: 'Web Development',
-    leadGeneratedBy: '',
-    closedBy: '',
-    assignedDevelopers: [],
-    advanceAmount: '',
-    notes: ''
-  });
-  const [manualProducts, setManualProducts] = useState([]);
-  const [allProducts, setAllProducts] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [submittingManual, setSubmittingManual] = useState(false);
 
   // Collect Payment Modal
   const [paymentSale, setPaymentSale] = useState(null);
@@ -141,80 +126,7 @@ const SalesListView = () => {
     }
   }, [isSuperAdmin]);
 
-  const handleManualProductToggle = (prod) => {
-    const exists = manualProducts.find(p => p._id === prod._id);
-    if (exists) {
-      setManualProducts(prev => prev.filter(p => p._id !== prod._id));
-    } else {
-      setManualProducts(prev => [
-        ...prev,
-        {
-          productId: prod._id,
-          name: prod.name,
-          category: prod.category,
-          basePrice: prod.basePrice,
-          discountPercent: 0,
-          finalPrice: prod.basePrice,
-          currency: prod.currency || 'PKR'
-        }
-      ]);
-    }
-  };
 
-  const manualTotalAmount = manualProducts.reduce((sum, p) => sum + (p.finalPrice || 0), 0);
-
-  const handleCreateManualSale = async (e) => {
-    e.preventDefault();
-    if (manualProducts.length === 0) {
-      addToast({ title: 'Validation Error', message: 'Please select at least one product.', type: 'error' });
-      return;
-    }
-
-    setSubmittingManual(true);
-    try {
-      const payload = {
-        customer: {
-          businessName: manualForm.businessName.trim(),
-          phoneNumber: manualForm.phoneNumber.trim(),
-          email: manualForm.email.trim(),
-          area: manualForm.area,
-          category: manualForm.category
-        },
-        leadGeneratedBy: manualForm.leadGeneratedBy || null,
-        closedBy: manualForm.closedBy || user._id,
-        assignedDevelopers: manualForm.assignedDevelopers,
-        products: manualProducts,
-        totalAmount: manualTotalAmount,
-        advanceAmount: parseFloat(manualForm.advanceAmount) || 0,
-        notes: manualForm.notes.trim()
-      };
-
-      const res = await SaleService.createManualSale(payload);
-      if (res.data?.success) {
-        addToast({ title: 'Manual Sale Created', message: res.data.message, type: 'success' });
-        setIsManualModalOpen(false);
-        setManualProducts([]);
-        setManualForm({
-          businessName: '',
-          phoneNumber: '',
-          email: '',
-          area: 'Gulberg, Lahore',
-          category: 'Web Development',
-          leadGeneratedBy: '',
-          closedBy: '',
-          assignedDevelopers: [],
-          advanceAmount: '',
-          notes: ''
-        });
-        fetchSales(1);
-      }
-    } catch (err) {
-      console.error('Error creating manual sale:', err);
-      addToast({ title: 'Error', message: err.response?.data?.message || err.message, type: 'error' });
-    } finally {
-      setSubmittingManual(false);
-    }
-  };
 
   const handleConfirmFinalPayment = async () => {
     if (!paymentSale) return;
@@ -354,6 +266,22 @@ const SalesListView = () => {
                         <div className="text-[10px] text-zinc-500 font-normal mt-0.5">
                           {s.customer?.area} • {s.customer?.category}
                         </div>
+                        {Array.isArray(s.products) && s.products.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1 font-normal">
+                            {s.products.map((p, idx) => (
+                              <span
+                                key={idx}
+                                className={`text-[9px] px-1.5 py-0.2 border ${
+                                  p.billingType === 'monthly'
+                                    ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300 font-mono'
+                                    : 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                                }`}
+                              >
+                                {p.name}{p.billingType === 'monthly' ? ` (${p.billingDurationMonths || 1}mo)` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-zinc-300">
                         {s.leadGeneratedByName || 'N/A'}
@@ -495,165 +423,11 @@ const SalesListView = () => {
       )}
 
       {/* ─── CREATE MANUAL SALE MODAL (SUPER ADMIN) ─────────────────────────── */}
-      {isManualModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-          <form onSubmit={handleCreateManualSale} className="bg-[#090909] border border-[#2B2B2B] w-full max-w-4xl lg:max-w-5xl shadow-2xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#202020] pb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Plus className="w-4 h-4 text-emerald-400" />
-                <span>Create Direct / Off-Pipeline Sale</span>
-              </h3>
-              <button type="button" onClick={() => setIsManualModalOpen(false)} className="text-zinc-500 hover:text-white cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Customer Information */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Business Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={manualForm.businessName}
-                  onChange={(e) => setManualForm({ ...manualForm, businessName: e.target.value })}
-                  placeholder="e.g. Lahore Tech Solutions"
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Phone Number</label>
-                <input
-                  type="text"
-                  value={manualForm.phoneNumber}
-                  onChange={(e) => setManualForm({ ...manualForm, phoneNumber: e.target.value })}
-                  placeholder="0300-1234567"
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Email</label>
-                <input
-                  type="email"
-                  value={manualForm.email}
-                  onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
-                  placeholder="contact@client.com"
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Area</label>
-                <input
-                  type="text"
-                  value={manualForm.area}
-                  onChange={(e) => setManualForm({ ...manualForm, area: e.target.value })}
-                  placeholder="Gulberg, Lahore"
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none focus:border-white"
-                />
-              </div>
-            </div>
-
-            {/* Role Attributions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-2 border-t border-[#1C1C1C]">
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Lead Generated By</label>
-                <select
-                  value={manualForm.leadGeneratedBy}
-                  onChange={(e) => setManualForm({ ...manualForm, leadGeneratedBy: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none"
-                >
-                  <option value="">Direct Inbound (None)</option>
-                  {allUsers.map(u => (
-                    <option key={u._id} value={u._id}>{u.name} ({u.roles?.join(', ')})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 uppercase text-[10px] mb-1">Closed By</label>
-                <select
-                  value={manualForm.closedBy}
-                  onChange={(e) => setManualForm({ ...manualForm, closedBy: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none"
-                >
-                  <option value="">Myself ({user?.name})</option>
-                  {allUsers.map(u => (
-                    <option key={u._id} value={u._id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Product Selection */}
-            <div className="space-y-2 pt-2 border-t border-[#1C1C1C] text-xs">
-              <label className="block text-zinc-400 uppercase text-[10px]">Attach Offerings *</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                {allProducts.map(prod => {
-                  const isSelected = manualProducts.some(p => p._id === prod._id);
-                  return (
-                    <div
-                      key={prod._id}
-                      onClick={() => handleManualProductToggle(prod)}
-                      className={`p-2 border flex items-center justify-between cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-950/40 text-white'
-                          : 'border-[#222222] bg-black text-zinc-400 hover:border-zinc-700'
-                      }`}
-                    >
-                      <div className="truncate pr-2">
-                        <div className="font-bold truncate">{prod.name}</div>
-                        <span className="text-[10px] text-zinc-500">{formatPKR(prod.basePrice)}</span>
-                      </div>
-                      <input type="checkbox" checked={isSelected} onChange={() => {}} className="accent-emerald-500" />
-                    </div>
-                  );
-                })}
-              </div>
-
-              {manualProducts.length > 0 && (
-                <div className="p-2.5 bg-black border border-emerald-800 flex justify-between items-center text-xs">
-                  <span className="text-zinc-400">Total Calculated:</span>
-                  <span className="text-emerald-400 font-bold font-mono">{formatPKR(manualTotalAmount)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Advance Amount */}
-            <div className="pt-2 border-t border-[#1C1C1C] text-xs">
-              <label className="block text-zinc-400 uppercase text-[10px] mb-1">Advance Amount Collected (PKR)</label>
-              <input
-                type="number"
-                min="0"
-                max={manualTotalAmount}
-                value={manualForm.advanceAmount}
-                onChange={(e) => setManualForm({ ...manualForm, advanceAmount: e.target.value })}
-                placeholder="0"
-                className="w-full px-2.5 py-1.5 bg-black border border-[#2B2B2B] text-white focus:outline-none"
-              />
-            </div>
-
-            <div className="pt-3 border-t border-[#202020] flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setIsManualModalOpen(false)}
-                className="px-4 py-1.5 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 border border-[#2A2A2A] text-xs cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submittingManual}
-                className="px-5 py-1.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold uppercase cursor-pointer"
-              >
-                {submittingManual ? 'Creating...' : 'Create Sale & Launch Project'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <ManualSaleModal
+        isOpen={isManualModalOpen}
+        onClose={() => setIsManualModalOpen(false)}
+        onSuccess={() => fetchSales(1)}
+      />
 
     </div>
   );

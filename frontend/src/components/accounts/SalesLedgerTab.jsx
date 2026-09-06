@@ -108,58 +108,81 @@ const SalesLedgerTab = ({ periodParams, onAddSale }) => {
                   <th className="py-3 px-4 font-semibold">Client / Business</th>
                   <th className="py-3 px-4 font-semibold">Industry</th>
                   <th className="py-3 px-4 font-semibold">Area</th>
-                  <th className="py-3 px-4 font-semibold">Closed By</th>
                   <th className="py-3 px-4 font-semibold">Products Sold</th>
-                  <th className="py-3 px-4 font-semibold text-right">Deal Value</th>
+                  <th className="py-3 px-4 font-semibold text-right">Contract Value</th>
+                  <th className="py-3 px-4 font-semibold text-right text-emerald-400">Cash Inflow</th>
+                  <th className="py-3 px-4 font-semibold text-right text-amber-400">Pending Balance</th>
+                  <th className="py-3 px-4 font-semibold text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#141414]">
-                {sales.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#121212] transition-colors">
-                    <td className="py-3.5 px-4 text-zinc-400 whitespace-nowrap">
-                      {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-white">
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                        <span className="truncate max-w-xs">{item.businessName}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300">
-                      <span className="px-2 py-0.5 bg-[#141414] border border-[#222222] text-[11px] text-zinc-300">
-                        {item.category || 'General'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-400">
-                      <div className="flex items-center gap-1 truncate max-w-[140px]">
-                        <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
-                        <span>{item.area || 'Lahore'}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300">
-                      <div className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-blue-400 shrink-0" />
-                        <span>{item.extractedByName || 'Sales Desk'}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300">
-                      {item.interestedProducts && item.interestedProducts.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {item.interestedProducts.map((p, idx) => (
-                            <span key={idx} className="px-1.5 py-0.5 bg-blue-950/40 border border-blue-800/60 text-blue-300 text-[10px]">
-                              {p.name} ({formatPKR(p.finalPrice || p.basePrice)})
-                            </span>
-                          ))}
+                {sales.map((item) => {
+                  const contractVal = item.dealValue || 0;
+                  const cashCollected = item.advanceAmount !== undefined ? item.advanceAmount : contractVal;
+                  const balance = item.remainingAmount !== undefined ? item.remainingAmount : (contractVal - cashCollected);
+                  const isFullyPaid = balance <= 0;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-[#121212] transition-colors">
+                      <td className="py-3.5 px-4 text-zinc-400 whitespace-nowrap">
+                        {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-white">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span className="truncate max-w-xs">{item.businessName}</span>
                         </div>
-                      ) : (
-                        <span className="text-zinc-600 text-[11px]">Direct Deal</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-bold text-emerald-400 text-sm whitespace-nowrap">
-                      {formatPKR(item.dealValue)}
-                    </td>
-                  </tr>
-                ))}
+                        <div className="text-[10px] text-zinc-500 font-normal mt-0.5">
+                          Closed by {item.extractedByName || 'Sales Desk'}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-300">
+                        <span className="px-2 py-0.5 bg-[#141414] border border-[#222222] text-[11px] text-zinc-300">
+                          {item.category || 'General'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-400">
+                        <div className="flex items-center gap-1 truncate max-w-[130px]">
+                          <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
+                          <span>{item.area || 'Lahore'}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-300">
+                        {item.interestedProducts && item.interestedProducts.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {item.interestedProducts.map((p, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 bg-blue-950/40 border border-blue-800/60 text-blue-300 text-[10px]">
+                                {p.name} ({formatPKR(p.finalPrice || p.basePrice)})
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-zinc-600 text-[11px]">Direct Deal</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-bold text-white whitespace-nowrap">
+                        {formatPKR(contractVal)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-bold text-emerald-400 whitespace-nowrap">
+                        {formatPKR(cashCollected)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-bold text-amber-400 whitespace-nowrap">
+                        {formatPKR(balance)}
+                      </td>
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {isFullyPaid ? (
+                          <span className="px-2 py-0.5 bg-emerald-950/50 border border-emerald-800/80 text-emerald-400 text-[10px] uppercase font-bold">
+                            Fully Paid
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-950/50 border border-amber-800/80 text-amber-400 text-[10px] uppercase font-bold">
+                            Partial Advance
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

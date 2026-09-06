@@ -28,6 +28,17 @@ const productSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  billingType: {
+    type: String,
+    enum: ['one_time', 'monthly'],
+    default: 'one_time',
+    index: true
+  },
+  defaultDurationMonths: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
   maxDiscountPercent: {
     type: Number,
     default: 0,

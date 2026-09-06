@@ -47,7 +47,11 @@ const SaleSchema = new mongoose.Schema({
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
     name: { type: String, required: true },
     category: { type: String, default: '' },
+    billingType: { type: String, enum: ['one_time', 'monthly'], default: 'one_time' },
+    billingDurationMonths: { type: Number, default: 1, min: 1 },
+    monthlyPrice: { type: Number, default: 0 },
     basePrice: { type: Number, required: true },
+    discountAmount: { type: Number, default: 0, min: 0 },
     discountPercent: { type: Number, default: 0 },
     finalPrice: { type: Number, required: true },
     currency: { type: String, default: 'PKR' }
@@ -58,10 +62,30 @@ const SaleSchema = new mongoose.Schema({
     min: 0,
     index: true
   },
+  agreedAdvanceAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   advanceAmount: {
     type: Number,
     default: 0,
     min: 0
+  },
+  pendingAdvanceAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  completionAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  advanceScheduleNotes: {
+    type: String,
+    default: '',
+    trim: true
   },
   remainingAmount: {
     type: Number,

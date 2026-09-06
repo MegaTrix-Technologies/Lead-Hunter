@@ -72,6 +72,7 @@ exports.getAccountsSummary = async (req, res) => {
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
     // 1. Aggregate Sales from Sale model
+    // 1. Aggregate Sales from Sale model (Dual Basis: Cash Realized vs. Booked Contract)
     const salesAgg = await Sale.aggregate([
       {
         $match: {
@@ -81,18 +82,24 @@ exports.getAccountsSummary = async (req, res) => {
       {
         $group: {
           _id: null,
-          totalSales: { $sum: '$totalAmount' },
+          bookedSales: { $sum: '$totalAmount' },
+          realizedSales: { $sum: '$advanceAmount' },
+          pendingReceivables: { $sum: '$remainingAmount' },
           count: { $sum: 1 },
-          avgDealSize: { $avg: '$totalAmount' }
+          avgDealSize: { $avg: '$totalAmount' },
+          avgCashCollected: { $avg: '$advanceAmount' }
         }
       }
     ]);
 
-    const totalSales = salesAgg[0]?.totalSales || 0;
+    const bookedSales = salesAgg[0]?.bookedSales || 0;
+    const realizedSales = salesAgg[0]?.realizedSales || 0;
+    const pendingReceivables = salesAgg[0]?.pendingReceivables || 0;
     const salesCount = salesAgg[0]?.count || 0;
     const avgDealSize = Math.round(salesAgg[0]?.avgDealSize || 0);
+    const avgCashCollected = Math.round(salesAgg[0]?.avgCashCollected || 0);
 
-    // Sales by Customer Category
+    // Sales by Customer Category (Cash Inflow & Booked Values)
     const salesByCategory = await Sale.aggregate([
       {
         $match: {
@@ -102,7 +109,8 @@ exports.getAccountsSummary = async (req, res) => {
       {
         $group: {
           _id: { $ifNull: ['$customer.category', 'General'] },
-          amount: { $sum: '$totalAmount' },
+          amount: { $sum: '$advanceAmount' },
+          bookedAmount: { $sum: '$totalAmount' },
           count: { $sum: 1 }
         }
       },
@@ -111,6 +119,7 @@ exports.getAccountsSummary = async (req, res) => {
         $project: {
           category: '$_id',
           amount: 1,
+          bookedAmount: 1,
           count: 1,
           _id: 0
         }
@@ -163,9 +172,14 @@ exports.getAccountsSummary = async (req, res) => {
       }
     ]);
 
-    // 3. Compute Net Profit & Margin
-    const netProfit = totalSales - totalExpenses;
-    const profitMargin = totalSales > 0 ? parseFloat(((netProfit / totalSales) * 100).toFixed(1)) : 0;
+    // 3. Compute Net Profit & Margin (Dual Basis)
+    // Cash Basis (Realized Inflow)
+    const realizedNetProfit = realizedSales - totalExpenses;
+    const realizedProfitMargin = realizedSales > 0 ? parseFloat(((realizedNetProfit / realizedSales) * 100).toFixed(1)) : 0;
+
+    // Accrual Basis (Contract Bookings)
+    const projectedNetProfit = bookedSales - totalExpenses;
+    const projectedProfitMargin = bookedSales > 0 ? parseFloat(((projectedNetProfit / bookedSales) * 100).toFixed(1)) : 0;
 
     // 4. Generate Trend Timeline
     const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
@@ -180,7 +194,9 @@ exports.getAccountsSummary = async (req, res) => {
       {
         $group: {
           _id: { $dateToString: { format: groupByFormat, date: '$closedAt' } },
-          sales: { $sum: '$totalAmount' }
+          sales: { $sum: '$advanceAmount' }, // Default trend to cash velocity
+          realizedSales: { $sum: '$advanceAmount' },
+          bookedSales: { $sum: '$totalAmount' }
         }
       }
     ]);
@@ -202,11 +218,25 @@ exports.getAccountsSummary = async (req, res) => {
     // Combine Timeline Points
     const timelineMap = {};
     salesTimeline.forEach(item => {
-      timelineMap[item._id] = { period: item._id, sales: item.sales, expenses: 0, netProfit: item.sales };
+      timelineMap[item._id] = {
+        period: item._id,
+        sales: item.sales,
+        realizedSales: item.realizedSales,
+        bookedSales: item.bookedSales,
+        expenses: 0,
+        netProfit: item.sales
+      };
     });
     expensesTimeline.forEach(item => {
       if (!timelineMap[item._id]) {
-        timelineMap[item._id] = { period: item._id, sales: 0, expenses: item.expenses, netProfit: -item.expenses };
+        timelineMap[item._id] = {
+          period: item._id,
+          sales: 0,
+          realizedSales: 0,
+          bookedSales: 0,
+          expenses: item.expenses,
+          netProfit: -item.expenses
+        };
       } else {
         timelineMap[item._id].expenses = item.expenses;
         timelineMap[item._id].netProfit = timelineMap[item._id].sales - item.expenses;
@@ -225,14 +255,28 @@ exports.getAccountsSummary = async (req, res) => {
           endDate: end.toISOString()
         },
         summary: {
-          totalSales,
-          salesCount,
+          // Cash Basis (Realized Inflow)
+          realizedSales,
+          realizedNetProfit,
+          realizedProfitMargin,
+          avgCashCollected,
+
+          // Accrual / Booked Pipeline Basis
+          bookedSales,
+          projectedNetProfit,
+          projectedProfitMargin,
+          pendingReceivables,
           avgDealSize,
+
+          // Backward-compatible aliases (defaults to Cash Basis)
+          totalSales: realizedSales,
+          netProfit: realizedNetProfit,
+          profitMargin: realizedProfitMargin,
+
+          salesCount,
           totalExpenses,
           expenseCount,
           avgExpense,
-          netProfit,
-          profitMargin,
           salesByCategory,
           expensesByCategory
         },
@@ -486,7 +530,15 @@ exports.getAccountsReport = async (req, res) => {
     const [salesAgg, expensesAgg, salesByCategory, expensesByCategory, recentSales, topExpenses] = await Promise.all([
       Sale.aggregate([
         { $match: { closedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: null, totalSales: { $sum: '$totalAmount' }, count: { $sum: 1 } } }
+        { 
+          $group: { 
+            _id: null, 
+            bookedSales: { $sum: '$totalAmount' },
+            realizedSales: { $sum: '$advanceAmount' },
+            pendingReceivables: { $sum: '$remainingAmount' },
+            count: { $sum: 1 } 
+          } 
+        }
       ]),
       Expense.aggregate([
         { $match: { date: { $gte: start, $lte: end } } },
@@ -494,7 +546,14 @@ exports.getAccountsReport = async (req, res) => {
       ]),
       Sale.aggregate([
         { $match: { closedAt: { $gte: start, $lte: end } } },
-        { $group: { _id: { $ifNull: ['$customer.category', 'General'] }, amount: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+        { 
+          $group: { 
+            _id: { $ifNull: ['$customer.category', 'General'] }, 
+            amount: { $sum: '$advanceAmount' },
+            bookedAmount: { $sum: '$totalAmount' },
+            count: { $sum: 1 } 
+          } 
+        },
         { $sort: { amount: -1 } }
       ]),
       Expense.aggregate([
@@ -512,12 +571,17 @@ exports.getAccountsReport = async (req, res) => {
         .lean()
     ]);
 
-    const totalSales = salesAgg[0]?.totalSales || 0;
+    const bookedSales = salesAgg[0]?.bookedSales || 0;
+    const realizedSales = salesAgg[0]?.realizedSales || 0;
+    const pendingReceivables = salesAgg[0]?.pendingReceivables || 0;
     const totalExpenses = expensesAgg[0]?.totalExpenses || 0;
     const salesCount = salesAgg[0]?.count || 0;
     const expenseCount = expensesAgg[0]?.count || 0;
-    const netProfit = totalSales - totalExpenses;
-    const profitMargin = totalSales > 0 ? parseFloat(((netProfit / totalSales) * 100).toFixed(1)) : 0;
+
+    const realizedNetProfit = realizedSales - totalExpenses;
+    const realizedProfitMargin = realizedSales > 0 ? parseFloat(((realizedNetProfit / realizedSales) * 100).toFixed(1)) : 0;
+    const projectedNetProfit = bookedSales - totalExpenses;
+    const projectedProfitMargin = bookedSales > 0 ? parseFloat(((projectedNetProfit / bookedSales) * 100).toFixed(1)) : 0;
 
     res.json({
       success: true,
@@ -529,15 +593,22 @@ exports.getAccountsReport = async (req, res) => {
           author: 'MegaTrix Financial Management'
         },
         kpis: {
-          totalSales,
+          realizedSales,
+          bookedSales,
+          pendingReceivables,
+          realizedNetProfit,
+          realizedProfitMargin,
+          projectedNetProfit,
+          projectedProfitMargin,
+          totalSales: realizedSales,
           totalExpenses,
-          netProfit,
-          profitMargin,
+          netProfit: realizedNetProfit,
+          profitMargin: realizedProfitMargin,
           salesCount,
           expenseCount
         },
         breakdowns: {
-          salesByCategory: salesByCategory.map(s => ({ category: s._id, amount: s.amount, count: s.count })),
+          salesByCategory: salesByCategory.map(s => ({ category: s._id, amount: s.amount, bookedAmount: s.bookedAmount, count: s.count })),
           expensesByCategory: expensesByCategory.map(e => ({ category: e._id, amount: e.amount, count: e.count }))
         },
         itemized: {
@@ -546,6 +617,9 @@ exports.getAccountsReport = async (req, res) => {
             category: s.customer?.category,
             area: s.customer?.area,
             dealValue: s.totalAmount,
+            advanceAmount: s.advanceAmount,
+            remainingAmount: s.remainingAmount,
+            status: s.status,
             interestedProducts: s.products,
             extractedByName: s.leadGeneratedByName,
             closedByName: s.closedByName,

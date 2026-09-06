@@ -100,15 +100,24 @@ const FinancialReportTab = ({ periodParams, onExportExcel, onExportPdf, exportin
 
         {/* Executive Summary P&L Box */}
         <div className="bg-[#030303] border border-[#1E1E1E] p-6 space-y-4">
-          <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-            1. Executive P&amp;L Summary
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              1. Executive P&amp;L Summary (Cash Basis &amp; Contract Pipeline)
+            </h4>
+            <span className="text-[10px] text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-950/40 border border-emerald-800 uppercase">
+              Cash Realized Inflow Focus
+            </span>
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
             <div className="p-3 bg-[#080808] border border-[#1E1E1E]">
-              <div className="text-[10px] text-zinc-500 uppercase">Total Sales Inflow</div>
-              <div className="text-base font-bold text-emerald-400 mt-1">{formatPKR(kpis.totalSales)}</div>
-              <div className="text-[10px] text-zinc-400 mt-1">{kpis.salesCount} Deals Closed</div>
+              <div className="text-[10px] text-zinc-500 uppercase">Realized Sales Inflow</div>
+              <div className="text-base font-bold text-emerald-400 mt-1">
+                {formatPKR(kpis.realizedSales !== undefined ? kpis.realizedSales : kpis.totalSales)}
+              </div>
+              <div className="text-[10px] text-zinc-400 mt-1">
+                Booked: {formatPKR(kpis.bookedSales || kpis.totalSales)}
+              </div>
             </div>
 
             <div className="p-3 bg-[#080808] border border-[#1E1E1E]">
@@ -118,17 +127,21 @@ const FinancialReportTab = ({ periodParams, onExportExcel, onExportPdf, exportin
             </div>
 
             <div className="p-3 bg-[#080808] border border-[#1E1E1E]">
-              <div className="text-[10px] text-zinc-500 uppercase">Net Operating Profit</div>
+              <div className="text-[10px] text-zinc-500 uppercase">Realized Net Cash Profit</div>
               <div className={`text-base font-bold mt-1 ${isProfitable ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {formatPKR(kpis.netProfit)}
+                {formatPKR(kpis.realizedNetProfit !== undefined ? kpis.realizedNetProfit : kpis.netProfit)}
               </div>
-              <div className="text-[10px] text-zinc-400 mt-1">{isProfitable ? 'Net Surplus' : 'Operating Deficit'}</div>
+              <div className="text-[10px] text-zinc-400 mt-1">
+                Projected: {formatPKR(kpis.projectedNetProfit !== undefined ? kpis.projectedNetProfit : kpis.netProfit)}
+              </div>
             </div>
 
             <div className="p-3 bg-[#080808] border border-[#1E1E1E]">
-              <div className="text-[10px] text-zinc-500 uppercase">Profit Margin</div>
-              <div className="text-base font-bold text-blue-400 mt-1">{kpis.profitMargin}%</div>
-              <div className="text-[10px] text-zinc-400 mt-1">Margin Rate</div>
+              <div className="text-[10px] text-zinc-500 uppercase">Accounts Receivable</div>
+              <div className="text-base font-bold text-amber-400 mt-1">
+                {formatPKR(kpis.pendingReceivables || 0)}
+              </div>
+              <div className="text-[10px] text-zinc-400 mt-1">Margin: {kpis.profitMargin}%</div>
             </div>
           </div>
         </div>
