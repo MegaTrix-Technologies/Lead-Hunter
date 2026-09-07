@@ -144,7 +144,7 @@ exports.getQuota = async (req, res) => {
 };
 
 /**
- * Worldwide Google Places Location Autocomplete
+ * Pakistan Google Places Location Autocomplete (Sub-areas, Localities & Sectors)
  */
 exports.autocompleteArea = async (req, res) => {
   try {
@@ -163,7 +163,7 @@ exports.autocompleteArea = async (req, res) => {
         'https://places.googleapis.com/v1/places:autocomplete',
         {
           input: input.trim(),
-          includedPrimaryTypes: ['locality']
+          includedRegionCodes: ['pk']
         },
         {
           headers: {
@@ -179,11 +179,11 @@ exports.autocompleteArea = async (req, res) => {
         .filter(Boolean);
 
       if (suggestions.length > 0) {
-        return res.json({ success: true, suggestions: suggestions.slice(0, 6) });
+        return res.json({ success: true, suggestions: suggestions.slice(0, 8) });
       }
     } catch (newApiErr) {
       const classicRes = await axios.get(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=(cities)&key=${apiKey}`,
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&components=country:pk&types=(regions)&key=${apiKey}`,
         { timeout: 4000 }
       );
 
@@ -191,7 +191,7 @@ exports.autocompleteArea = async (req, res) => {
         .map(p => p.description)
         .filter(Boolean);
 
-      return res.json({ success: true, suggestions: predictions.slice(0, 6) });
+      return res.json({ success: true, suggestions: predictions.slice(0, 8) });
     }
 
     res.json({ success: true, suggestions: [] });

@@ -414,7 +414,7 @@ exports.exportDatasetPdf = async (req, res) => {
     }
 
     const leads = await Lead.find(query).sort({ rating: -1, reviewCount: -1 }).lean();
-    await pdfReportService.generateDatasetPdf(dataset, leads, res);
+    await pdfReportService.generateDatasetPdf(dataset, leads, res, req.user);
   } catch (error) {
     console.error('[Dataset Controller] exportDatasetPdf error:', error);
     res.status(500).json({ success: false, message: error.message });

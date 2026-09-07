@@ -229,7 +229,7 @@ const ScraperControls = () => {
             </h2>
           </div>
           <p className="text-xs text-zinc-400 font-mono mt-1">
-            Extract up to 100 live Google Places profiles per search and generate an isolated, manageable Dataset.
+            Extract up to 100 live Google Places profiles across Pakistan with multi-stage geographic auto-expansion.
           </p>
         </div>
 
@@ -251,12 +251,17 @@ const ScraperControls = () => {
             </span>
           )}
 
+          <span className="px-2 py-0.5 border border-emerald-600/70 bg-emerald-950/30 text-emerald-400 font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            Pakistan Region
+          </span>
+
           <span className={`px-2 py-0.5 border ${
             strictSearch 
               ? 'border-blue-500/80 bg-blue-950/40 text-blue-400 font-semibold' 
               : 'border-zinc-700 bg-[#121212] text-zinc-300'
           }`}>
-            {strictSearch ? 'Strict Niche Mode' : 'Broad Matches'}
+            {strictSearch ? 'Strict Niche Mode' : 'Broad Auto-Expansion'}
           </span>
         </div>
       </div>
@@ -318,7 +323,7 @@ const ScraperControls = () => {
           {/* Area / Commercial Location (With Autocomplete Dropdown) */}
           <div className="relative" ref={dropdownRef}>
             <label className="block text-xs font-mono text-zinc-400 mb-1.5 uppercase">
-              Commercial Area / Location <span className="text-red-500">*</span>
+              Pakistan Commercial Area / Location <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
@@ -329,13 +334,13 @@ const ScraperControls = () => {
                 onChange={(e) => handleAreaChange(e.target.value)}
                 onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
                 onKeyDown={handleKeyDown}
-                placeholder="e.g. Gulberg, Lahore, DHA Phase 5, Johar Town..."
+                placeholder="e.g. DHA Phase 5, Gulberg, Johar Town, Lahore..."
                 className="w-full px-3.5 py-2.5 bg-[#000000] border border-[#2B2B2B] text-white text-xs font-mono focus:border-white focus:outline-none disabled:opacity-50"
               />
               {loadingSuggestions ? (
                 <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin absolute right-3 top-3" />
               ) : (
-                <Globe className="w-3.5 h-3.5 text-zinc-500 absolute right-3 top-3" />
+                <MapPin className="w-3.5 h-3.5 text-zinc-500 absolute right-3 top-3" />
               )}
             </div>
 
@@ -552,9 +557,9 @@ const ScraperControls = () => {
             />
           </div>
 
-          {/* Filter 4: Strict 100% Filter */}
+          {/* Filter 4: Strict Niche Filter */}
           <div 
-            onMouseEnter={() => setHoverParamText('Strict 100% Filter: Enforces exact keyword matching in business name or primary category without broadening to adjacent niches.')}
+            onMouseEnter={() => setHoverParamText('Strict Niche Filter: When ON, strictly matches exact keyword in business name or category. When OFF (Default & Recommended), broadens search with adjacent businesses and geographic expansion to maximize profiles.')}
             onMouseLeave={() => setHoverParamText('')}
             onClick={() => !scraping && setStrictSearch(!strictSearch)}
             className={`p-3 border transition-all cursor-pointer flex items-center justify-between ${
@@ -564,8 +569,8 @@ const ScraperControls = () => {
             <div className="flex items-center gap-2.5">
               <ShieldCheck className={`w-4 h-4 ${strictSearch ? 'text-blue-400' : 'text-zinc-500'}`} />
               <div>
-                <div className="text-xs font-semibold text-white font-mono">Strict 100% Filter</div>
-                <div className="text-[10px] text-zinc-500 font-mono">No relaxed fallback</div>
+                <div className="text-xs font-semibold text-white font-mono">Strict Niche Filter</div>
+                <div className="text-[10px] text-zinc-500 font-mono">{strictSearch ? 'Exact niche only' : 'Off: Broad expansion'}</div>
               </div>
             </div>
             <div className={`w-4 h-4 border flex items-center justify-center ${strictSearch ? 'border-blue-400 bg-blue-400' : 'border-zinc-700 bg-black'}`}>

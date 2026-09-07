@@ -173,7 +173,7 @@ const AppendSearchModal = ({ dataset, isOpen, onClose }) => {
             >
               <label className="block text-[11px] text-zinc-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                 <span>
-                  Area / Worldwide Location <span className="text-rose-500 font-bold">*</span>
+                  Area / Pakistan Location <span className="text-rose-500 font-bold">*</span>
                 </span>
                 <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                   <Lock className="w-2.5 h-2.5 text-zinc-500" /> Locked to Dataset

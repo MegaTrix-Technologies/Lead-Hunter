@@ -72,16 +72,46 @@ exports.getLeads = async (req, res) => {
       });
     }
 
-    // Role-based scoping: Non-superadmins only see their extracted or generated leads
+    // Multi-Agent Conflict Prevention Scoping:
     const user = req.user;
-    if (!isSuperAdminUser(user) && user) {
-      andConditions.push({
-        $or: [
-          { extractedBy: user._id },
-          { generatedBy: user._id },
-          { followUpBy: user._id }
-        ]
-      });
+    const isSuperAdmin = isSuperAdminUser(user);
+
+    if (!isSuperAdmin && user) {
+      // 1. DNC leads: excluded from standard agent views
+      if (req.query.status !== 'Do Not Call') {
+        andConditions.push({ callStatus: { $ne: 'Do Not Call' } });
+      }
+
+      // 2. Conflict isolation across agents:
+      // - Follow-up: ONLY shown if scheduled by this user (followUpBy: user._id)
+      // - In-processing Lead: ONLY shown if generated/closed by this user
+      // - Converted Sale: Visible to all agents with attribution
+      // - General outreach leads: visible if owned or in dataset
+      const accessConditions = [
+        // Converted sales are benchmarks visible to all with attribution
+        { callStatus: 'sale' },
+
+        // Agent's own scheduled follow-ups
+        { callStatus: 'Follow Up', followUpBy: user._id },
+
+        // In-processing leads: only if generated or being closed by this user
+        { 
+          callStatus: { $in: ['Lead', 'Lead / Sale', 'processing'] }, 
+          $or: [{ generatedBy: user._id }, { closerId: user._id }, { extractedBy: user._id }] 
+        },
+
+        // Regular callable / un-isolated leads
+        {
+          callStatus: { $nin: ['Do Not Call', 'Follow Up', 'Closer Follow Up', 'Lead', 'Lead / Sale', 'processing', 'sale'] },
+          $or: [
+            { extractedBy: user._id },
+            { generatedBy: user._id },
+            ...(req.query.datasetId ? [{ datasetId: req.query.datasetId }, { datasetIds: req.query.datasetId }] : [])
+          ]
+        }
+      ];
+
+      andConditions.push({ $or: accessConditions });
     }
 
     if (andConditions.length > 0) {
@@ -113,11 +143,19 @@ exports.getLeads = async (req, res) => {
     const totalLeads = await Lead.countDocuments(query);
     const totalPages = Math.ceil(totalLeads / limit) || 1;
 
-    const leads = await Lead.find(query)
+    const rawLeads = await Lead.find(query)
       .sort(sort)
       .skip(skip)
       .limit(limit)
       .lean();
+
+    // Mask DNC phone numbers for non-superadmin users if viewed
+    const leads = rawLeads.map(l => {
+      if (l.callStatus === 'Do Not Call' && !isSuperAdmin) {
+        return { ...l, phoneNumber: '[DO NOT CALL - OPT-OUT]' };
+      }
+      return l;
+    });
 
     // Summary counts for UI badges (scoped to user if agent)
     const statusMatch = user && user.role === 'agent' ? { extractedBy: user._id } : {};
@@ -138,7 +176,7 @@ exports.getLeads = async (req, res) => {
     };
 
     statusCounts.forEach(item => {
-      if (item._id && statusMap.hasOwnProperty(item._id)) {
+      if (statusMap.hasOwnProperty(item._id)) {
         statusMap[item._id] = item.count;
       }
     });
@@ -163,24 +201,52 @@ exports.getLeads = async (req, res) => {
 };
 
 /**
- * Get active calling queue leads
+ * Get active calling queue leads (Strict Multi-Agent Conflict Prevention)
  */
 exports.getCallingQueue = async (req, res) => {
   try {
-    const { status, area, category } = req.query;
-    const query = {};
+    const { status, area, category, datasetId } = req.query;
+    const user = req.user;
+    const isSuperAdmin = isSuperAdminUser(user);
+    const andConditions = [];
+
+    // STRICT OUTREACH LOCK: Never allow Do Not Call, completed sales, or in-processing leads into the cold caller workstation!
+    andConditions.push({
+      callStatus: { $nin: ['Do Not Call', 'sale', 'Lead', 'Lead / Sale', 'processing'] }
+    });
 
     if (status && status !== 'ALL') {
-      query.callStatus = status;
+      andConditions.push({ callStatus: status });
     }
-    if (area) query.area = new RegExp(area, 'i');
-    if (category) query.category = new RegExp(category, 'i');
+    if (area) andConditions.push({ area: new RegExp(area, 'i') });
+    if (category) andConditions.push({ category: new RegExp(category, 'i') });
+    if (datasetId) {
+      andConditions.push({
+        $or: [{ datasetId }, { datasetIds: datasetId }]
+      });
+    }
 
-    // Role-based scoping: Agents only queue their extracted leads
-    const user = req.user;
-    if (user && user.role === 'agent') {
-      query.extractedBy = user._id;
+    // Role-based conflict prevention:
+    if (!isSuperAdmin && user) {
+      andConditions.push({
+        $or: [
+          // Agent's own exclusive follow-up leads
+          { callStatus: 'Follow Up', followUpBy: user._id },
+
+          // Callable leads not locked by another agent's follow-up
+          {
+            callStatus: { $in: ['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Shows Interest'] },
+            $or: [
+              { extractedBy: user._id },
+              { generatedBy: user._id },
+              ...(datasetId ? [{ datasetId }, { datasetIds: datasetId }] : [{ extractedBy: user._id }])
+            ]
+          }
+        ]
+      });
     }
+
+    const query = andConditions.length > 0 ? { $and: andConditions } : {};
 
     // Retrieve active queue up to 150 leads for quick workstation navigation
     const leads = await Lead.find(query)
@@ -215,7 +281,7 @@ exports.getLeadById = async (req, res) => {
 };
 
 /**
- * Update Call Status & Add Call Note
+ * Update Call Status & Add Call Note (With DNC & Follow-Up Audit Tracking)
  */
 exports.updateCallStatus = async (req, res) => {
   try {
@@ -239,9 +305,11 @@ exports.updateCallStatus = async (req, res) => {
 
     if (callStatus) {
       updateDoc.callStatus = callStatus;
+
       if (callStatus === 'Lead' || callStatus === 'Lead / Sale') {
         updateDoc.callStatus = 'Lead';
         updateDoc.status = 'lead';
+        updateDoc.leadGeneratedAt = new Date();
         if (req.user) {
           updateDoc.generatedBy = req.user._id;
           updateDoc.generatedByName = req.user.name;
@@ -256,6 +324,22 @@ exports.updateCallStatus = async (req, res) => {
           updateDoc.generatedBy = req.user._id;
           updateDoc.generatedByName = req.user.name;
         }
+      } else if (callStatus === 'Do Not Call') {
+        updateDoc.callStatus = 'Do Not Call';
+        updateDoc.dncAt = new Date();
+        if (req.user) {
+          updateDoc.dncBy = req.user._id;
+          updateDoc.dncByName = req.user.name;
+        }
+        // Clear active follow-up so lead is permanently dead
+        updateDoc.followUpDate = null;
+        updateDoc.followUpBy = null;
+        updateDoc.followUpByName = '';
+      } else if (['Uncontacted', 'Unreachable', 'IVR', 'Receptionist', 'Shows Interest'].includes(callStatus)) {
+        // Clearing previous follow-up assignment if the agent selected another disposition
+        updateDoc.followUpDate = null;
+        updateDoc.followUpBy = null;
+        updateDoc.followUpByName = '';
       }
     }
 

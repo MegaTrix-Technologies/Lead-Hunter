@@ -206,6 +206,7 @@ exports.closeLead = async (req, res) => {
 
       // Update lead state
       lead.callStatus = 'sale';
+      lead.convertedAt = new Date();
       lead.closerId = closerUser._id;
       lead.closerName = closerUser.name;
       lead.dealValue = totalAmount;

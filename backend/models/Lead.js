@@ -223,6 +223,33 @@ const LeadSchema = new mongoose.Schema({
   generatedByName: {
     type: String,
     default: ''
+  },
+  leadGeneratedAt: {
+    type: Date,
+    default: null
+  },
+
+  // Do Not Call (DNC) Audit Tracking
+  dncAt: {
+    type: Date,
+    default: null,
+    index: true
+  },
+  dncBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  dncByName: {
+    type: String,
+    default: ''
+  },
+
+  // Deal Conversion Tracking
+  convertedAt: {
+    type: Date,
+    default: null,
+    index: true
   }
 }, { 
   timestamps: true 
@@ -248,5 +275,7 @@ LeadSchema.index({ extractedBy: 1, callStatus: 1 });
 LeadSchema.index({ generatedBy: 1, callStatus: 1 });
 LeadSchema.index({ closerId: 1, callStatus: 1 });
 LeadSchema.index({ followUpBy: 1, callStatus: 1 });
+LeadSchema.index({ phoneNumber: 1, callStatus: 1 });
+LeadSchema.index({ placeId: 1, callStatus: 1 });
 
 module.exports = mongoose.model('Lead', LeadSchema);
