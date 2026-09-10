@@ -8,6 +8,12 @@ router.use(authenticate, requireSuperAdmin);
 
 // Accounts Overview & Financial Aggregation
 router.get('/summary', accountController.getAccountsSummary);
+router.get('/pending-sales', accountController.getPendingSales);
+
+// Inflows & Add Money CRUD
+router.get('/inflows', accountController.getInflowsLedger);
+router.post('/inflows', accountController.createInflow);
+router.delete('/inflows/:id', accountController.deleteInflow);
 
 // Detailed Data Views & Expense CRUD
 router.get('/sales', accountController.getSalesLedger);

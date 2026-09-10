@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const Sale = require('../models/Sale');
 const Expense = require('../models/Expense');
+const Inflow = require('../models/Inflow');
+const Project = require('../models/Project');
+const User = require('../models/User');
 const accountReportService = require('../services/accountReportService');
 
 /**
@@ -71,7 +74,6 @@ exports.getAccountsSummary = async (req, res) => {
     const { preset = 'this_month', startDate, endDate } = req.query;
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
-    // 1. Aggregate Sales from Sale model
     // 1. Aggregate Sales from Sale model (Dual Basis: Cash Realized vs. Booked Contract)
     const salesAgg = await Sale.aggregate([
       {
@@ -98,6 +100,34 @@ exports.getAccountsSummary = async (req, res) => {
     const salesCount = salesAgg[0]?.count || 0;
     const avgDealSize = Math.round(salesAgg[0]?.avgDealSize || 0);
     const avgCashCollected = Math.round(salesAgg[0]?.avgCashCollected || 0);
+
+    // 2. Aggregate Non-Sale Direct Inflows (Investments, Other Incomes, etc.)
+    const inflowsAgg = await Inflow.aggregate([
+      {
+        $match: {
+          date: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: '$type',
+          totalAmount: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    let totalInvestment = 0;
+    let totalOtherIncome = 0;
+    let totalMilestoneInflow = 0;
+    let totalInflowCount = 0;
+
+    inflowsAgg.forEach(item => {
+      totalInflowCount += item.count;
+      if (item._id === 'investment') totalInvestment += item.totalAmount;
+      else if (item._id === 'other_income') totalOtherIncome += item.totalAmount;
+      else if (item._id === 'project_payment') totalMilestoneInflow += item.totalAmount;
+    });
 
     // Sales by Customer Category (Cash Inflow & Booked Values)
     const salesByCategory = await Sale.aggregate([
@@ -126,7 +156,32 @@ exports.getAccountsSummary = async (req, res) => {
       }
     ]);
 
-    // 2. Aggregate Expenses from Expense model
+    // Inflows by Category
+    const inflowsByCategory = await Inflow.aggregate([
+      {
+        $match: {
+          date: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: '$category',
+          amount: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { amount: -1 } },
+      {
+        $project: {
+          category: '$_id',
+          amount: 1,
+          count: 1,
+          _id: 0
+        }
+      }
+    ]);
+
+    // 3. Aggregate Expenses from Expense model
     const expensesAgg = await Expense.aggregate([
       {
         $match: {
@@ -172,16 +227,22 @@ exports.getAccountsSummary = async (req, res) => {
       }
     ]);
 
-    // 3. Compute Net Profit & Margin (Dual Basis)
-    // Cash Basis (Realized Inflow)
-    const realizedNetProfit = realizedSales - totalExpenses;
-    const realizedProfitMargin = realizedSales > 0 ? parseFloat(((realizedNetProfit / realizedSales) * 100).toFixed(1)) : 0;
+    // 4. Compute Net Profit & Margin (Dual Basis)
+    // Cash Operating Basis: Realized Sales Inflow + Other Operating Income - Expenses
+    const effectiveOperatingInflow = realizedSales + totalOtherIncome;
+    const realizedNetProfit = effectiveOperatingInflow - totalExpenses;
+    const realizedProfitMargin = effectiveOperatingInflow > 0 ? parseFloat(((realizedNetProfit / effectiveOperatingInflow) * 100).toFixed(1)) : 0;
 
-    // Accrual Basis (Contract Bookings)
-    const projectedNetProfit = bookedSales - totalExpenses;
-    const projectedProfitMargin = bookedSales > 0 ? parseFloat(((projectedNetProfit / bookedSales) * 100).toFixed(1)) : 0;
+    // Total Net Cash Flow (including capital injections)
+    const totalCashInflow = realizedSales + totalInvestment + totalOtherIncome;
+    const netCashFlow = totalCashInflow - totalExpenses;
 
-    // 4. Generate Trend Timeline
+    // Accrual Basis (Contract Bookings + Other Income)
+    const effectiveBookedRevenue = bookedSales + totalOtherIncome;
+    const projectedNetProfit = effectiveBookedRevenue - totalExpenses;
+    const projectedProfitMargin = effectiveBookedRevenue > 0 ? parseFloat(((projectedNetProfit / effectiveBookedRevenue) * 100).toFixed(1)) : 0;
+
+    // 5. Generate Trend Timeline with Realtime High-Resolution Granularity
     const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     const groupByFormat = diffDays <= 45 ? '%Y-%m-%d' : '%Y-%m';
 
@@ -194,9 +255,32 @@ exports.getAccountsSummary = async (req, res) => {
       {
         $group: {
           _id: { $dateToString: { format: groupByFormat, date: '$closedAt' } },
-          sales: { $sum: '$advanceAmount' }, // Default trend to cash velocity
+          sales: { $sum: '$advanceAmount' },
           realizedSales: { $sum: '$advanceAmount' },
           bookedSales: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    const inflowsTimeline = await Inflow.aggregate([
+      {
+        $match: {
+          date: { $gte: start, $lte: end }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: groupByFormat, date: '$date' } },
+          investment: {
+            $sum: { $cond: [{ $eq: ['$type', 'investment'] }, '$amount', 0] }
+          },
+          otherIncome: {
+            $sum: { $cond: [{ $eq: ['$type', 'other_income'] }, '$amount', 0] }
+          },
+          projectPayments: {
+            $sum: { $cond: [{ $eq: ['$type', 'project_payment'] }, '$amount', 0] }
+          },
+          totalInflow: { $sum: '$amount' }
         }
       }
     ]);
@@ -217,16 +301,45 @@ exports.getAccountsSummary = async (req, res) => {
 
     // Combine Timeline Points
     const timelineMap = {};
+
     salesTimeline.forEach(item => {
       timelineMap[item._id] = {
         period: item._id,
         sales: item.sales,
         realizedSales: item.realizedSales,
         bookedSales: item.bookedSales,
+        investments: 0,
+        otherIncome: 0,
+        totalInflow: item.sales,
         expenses: 0,
         netProfit: item.sales
       };
     });
+
+    inflowsTimeline.forEach(item => {
+      if (!timelineMap[item._id]) {
+        timelineMap[item._id] = {
+          period: item._id,
+          sales: item.otherIncome,
+          realizedSales: item.otherIncome,
+          bookedSales: item.otherIncome,
+          investments: item.investment,
+          otherIncome: item.otherIncome,
+          totalInflow: item.totalInflow,
+          expenses: 0,
+          netProfit: item.otherIncome
+        };
+      } else {
+        timelineMap[item._id].investments += item.investment;
+        timelineMap[item._id].otherIncome += item.otherIncome;
+        timelineMap[item._id].sales += item.otherIncome;
+        timelineMap[item._id].realizedSales += item.otherIncome;
+        timelineMap[item._id].bookedSales += item.otherIncome;
+        timelineMap[item._id].totalInflow += item.investment + item.otherIncome;
+        timelineMap[item._id].netProfit = (timelineMap[item._id].sales) - timelineMap[item._id].expenses;
+      }
+    });
+
     expensesTimeline.forEach(item => {
       if (!timelineMap[item._id]) {
         timelineMap[item._id] = {
@@ -234,12 +347,15 @@ exports.getAccountsSummary = async (req, res) => {
           sales: 0,
           realizedSales: 0,
           bookedSales: 0,
+          investments: 0,
+          otherIncome: 0,
+          totalInflow: 0,
           expenses: item.expenses,
           netProfit: -item.expenses
         };
       } else {
         timelineMap[item._id].expenses = item.expenses;
-        timelineMap[item._id].netProfit = timelineMap[item._id].sales - item.expenses;
+        timelineMap[item._id].netProfit = (timelineMap[item._id].sales) - item.expenses;
       }
     });
 
@@ -257,6 +373,11 @@ exports.getAccountsSummary = async (req, res) => {
         summary: {
           // Cash Basis (Realized Inflow)
           realizedSales,
+          totalOtherIncome,
+          totalInvestment,
+          totalMilestoneInflow,
+          totalCashInflow,
+          netCashFlow,
           realizedNetProfit,
           realizedProfitMargin,
           avgCashCollected,
@@ -269,15 +390,17 @@ exports.getAccountsSummary = async (req, res) => {
           avgDealSize,
 
           // Backward-compatible aliases (defaults to Cash Basis)
-          totalSales: realizedSales,
+          totalSales: realizedSales + totalOtherIncome,
           netProfit: realizedNetProfit,
           profitMargin: realizedProfitMargin,
 
           salesCount,
+          inflowCount: totalInflowCount,
           totalExpenses,
           expenseCount,
           avgExpense,
           salesByCategory,
+          inflowsByCategory,
           expensesByCategory
         },
         trend
@@ -286,6 +409,263 @@ exports.getAccountsSummary = async (req, res) => {
   } catch (error) {
     console.error('[AccountController] getAccountsSummary error:', error);
     res.status(500).json({ success: false, message: 'Failed to aggregate accounts financial summary.' });
+  }
+};
+
+/**
+ * GET /api/accounts/pending-sales
+ * Returns active projects and sales with outstanding pending balances (remainingAmount > 0)
+ */
+exports.getPendingSales = async (req, res) => {
+  try {
+    const pendingSales = await Sale.find({ remainingAmount: { $gt: 0 } })
+      .sort({ closedAt: -1 })
+      .select('customer totalAmount advanceAmount remainingAmount status closedByName closedAt')
+      .lean();
+
+    const formatted = pendingSales.map(s => ({
+      id: s._id,
+      businessName: s.customer?.businessName || 'Client Project',
+      phoneNumber: s.customer?.phoneNumber || '',
+      category: s.customer?.category || 'General',
+      area: s.customer?.area || 'Lahore',
+      totalAmount: s.totalAmount || 0,
+      advanceAmount: s.advanceAmount || 0,
+      remainingAmount: s.remainingAmount || 0,
+      status: s.status,
+      closedByName: s.closedByName || 'Super Admin',
+      closedAt: s.closedAt
+    }));
+
+    res.json({
+      success: true,
+      count: formatted.length,
+      data: formatted
+    });
+  } catch (error) {
+    console.error('[AccountController] getPendingSales error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch pending receivable orders.' });
+  }
+};
+
+/**
+ * POST /api/accounts/inflows
+ * Record an Inflow: Project Milestone/Partial Payment, Investment Capital, or Other Income
+ */
+exports.createInflow = async (req, res) => {
+  try {
+    const {
+      type,
+      sourceName,
+      category,
+      amount,
+      currency = 'PKR',
+      date,
+      paymentMethod = 'Bank Transfer',
+      referenceId,
+      description,
+      saleId
+    } = req.body;
+
+    if (!type || !['project_payment', 'investment', 'other_income'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid inflow type. Must be project_payment, investment, or other_income.'
+      });
+    }
+
+    const cleanAmount = parseFloat(amount);
+    if (isNaN(cleanAmount) || cleanAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount must be a positive number.' });
+    }
+
+    let resolvedSourceName = sourceName ? sourceName.trim() : '';
+    let resolvedCategory = category || 'Miscellaneous Income';
+    let targetSale = null;
+
+    if (type === 'project_payment') {
+      if (!saleId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Target project / sale ID is required for recording partial milestone payments.'
+        });
+      }
+
+      targetSale = await Sale.findById(saleId);
+      if (!targetSale) {
+        return res.status(404).json({ success: false, message: 'Selected sale or project order not found.' });
+      }
+
+      if (cleanAmount > targetSale.remainingAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Payment amount (PKR ${cleanAmount.toLocaleString()}) exceeds remaining order balance (PKR ${targetSale.remainingAmount.toLocaleString()}).`
+        });
+      }
+
+      resolvedSourceName = targetSale.customer?.businessName || 'Client Project';
+      resolvedCategory = 'Project Milestone Payment';
+
+      // Decrement sale remaining balance & update advance/realized cash
+      targetSale.advanceAmount = (targetSale.advanceAmount || 0) + cleanAmount;
+      targetSale.remainingAmount = Math.max(0, targetSale.totalAmount - targetSale.advanceAmount);
+
+      const isFullyPaid = targetSale.remainingAmount === 0;
+      if (isFullyPaid) {
+        targetSale.paymentCompletedAt = new Date();
+        // Check if project is delivered
+        if (targetSale.isProjectDelivered) {
+          targetSale.status = 'payment_completed';
+        }
+      }
+
+      // Append note to Sale
+      const paymentLogMsg = `[Inflow Payment: PKR ${cleanAmount.toLocaleString()} via ${paymentMethod}${referenceId ? ` - Ref: ${referenceId.trim()}` : ''} on ${new Date().toLocaleDateString()}]`;
+      targetSale.notes = targetSale.notes ? `${targetSale.notes}\n${paymentLogMsg}` : paymentLogMsg;
+
+      await targetSale.save();
+
+      // Append delivery note to linked Project if present
+      if (targetSale.projectId) {
+        const linkedProject = await Project.findById(targetSale.projectId);
+        if (linkedProject) {
+          linkedProject.deliveryNotes.push({
+            note: `Milestone payment received: PKR ${cleanAmount.toLocaleString()} (${paymentMethod}). Remaining balance: PKR ${targetSale.remainingAmount.toLocaleString()}${isFullyPaid ? ' — (Order Fully Paid!)' : ''}`,
+            author: req.user.name,
+            authorId: req.user._id,
+            timestamp: new Date()
+          });
+          await linkedProject.save();
+        }
+      }
+    } else if (type === 'investment') {
+      if (!resolvedSourceName) resolvedSourceName = 'Investor Capital';
+      resolvedCategory = category || 'Direct Capital Investment';
+    } else if (type === 'other_income') {
+      if (!resolvedSourceName) resolvedSourceName = 'Income Source';
+      resolvedCategory = category || 'Consultancy Services';
+    }
+
+    const inflow = await Inflow.create({
+      type,
+      sourceName: resolvedSourceName,
+      category: resolvedCategory,
+      amount: cleanAmount,
+      currency,
+      date: date ? new Date(date) : new Date(),
+      paymentMethod,
+      referenceId: referenceId ? referenceId.trim() : '',
+      description: description ? description.trim() : '',
+      saleId: type === 'project_payment' ? targetSale?._id : null,
+      createdBy: req.user._id,
+      createdByName: req.user.name
+    });
+
+    res.status(201).json({
+      success: true,
+      message: type === 'project_payment'
+        ? `Partial payment of PKR ${cleanAmount.toLocaleString()} recorded. Remaining balance for "${resolvedSourceName}" updated to PKR ${targetSale.remainingAmount.toLocaleString()}.`
+        : `Inflow of PKR ${cleanAmount.toLocaleString()} (${resolvedCategory}) successfully logged.`,
+      data: inflow
+    });
+  } catch (error) {
+    console.error('[AccountController] createInflow error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /api/accounts/inflows
+ * Paginated list of all recorded Inflows (milestone payments, capital investments, other income)
+ */
+exports.getInflowsLedger = async (req, res) => {
+  try {
+    const { preset = 'this_month', startDate, endDate, type, search, page = 1, limit = 15 } = req.query;
+    const { start, end } = resolveDateRange(preset, startDate, endDate);
+
+    const filter = {
+      date: { $gte: start, $lte: end }
+    };
+
+    if (type && type !== 'all') {
+      filter.type = type;
+    }
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      filter.$or = [
+        { sourceName: regex },
+        { category: regex },
+        { referenceId: regex },
+        { description: regex }
+      ];
+    }
+
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 15;
+    const skip = (pageNum - 1) * limitNum;
+
+    const [totalInflows, inflows] = await Promise.all([
+      Inflow.countDocuments(filter),
+      Inflow.find(filter)
+        .sort({ date: -1 })
+        .populate('saleId', 'customer totalAmount remainingAmount status')
+        .skip(skip)
+        .limit(limitNum)
+        .lean()
+    ]);
+
+    res.json({
+      success: true,
+      data: inflows,
+      pagination: {
+        total: totalInflows,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalInflows / limitNum) || 1
+      }
+    });
+  } catch (error) {
+    console.error('[AccountController] getInflowsLedger error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve inflows ledger.' });
+  }
+};
+
+/**
+ * DELETE /api/accounts/inflows/:id
+ * Remove an Inflow and revert associated sale remaining balance if project payment
+ */
+exports.deleteInflow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inflow = await Inflow.findById(id);
+    if (!inflow) {
+      return res.status(404).json({ success: false, message: 'Inflow record not found.' });
+    }
+
+    // Revert target sale balance if this was a project payment
+    if (inflow.type === 'project_payment' && inflow.saleId) {
+      const sale = await Sale.findById(inflow.saleId);
+      if (sale) {
+        sale.advanceAmount = Math.max(0, (sale.advanceAmount || 0) - inflow.amount);
+        sale.remainingAmount = Math.max(0, sale.totalAmount - sale.advanceAmount);
+        if (sale.remainingAmount > 0 && sale.status === 'payment_completed') {
+          sale.status = sale.advanceAmount > 0 ? 'advance_paid' : 'project_active';
+          sale.paymentCompletedAt = null;
+        }
+        await sale.save();
+      }
+    }
+
+    await Inflow.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Inflow transaction removed and associated order balance reverted.'
+    });
+  } catch (error) {
+    console.error('[AccountController] deleteInflow error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -421,7 +801,7 @@ exports.getExpensesLedger = async (req, res) => {
 
 /**
  * POST /api/accounts/expenses
- * Super Admin adds an expense record (transaction handling)
+ * Super Admin adds an expense record
  */
 exports.createExpense = async (req, res) => {
   try {
@@ -527,7 +907,7 @@ exports.getAccountsReport = async (req, res) => {
     const { preset = 'this_month', startDate, endDate } = req.query;
     const { start, end, label } = resolveDateRange(preset, startDate, endDate);
 
-    const [salesAgg, expensesAgg, salesByCategory, expensesByCategory, recentSales, topExpenses] = await Promise.all([
+    const [salesAgg, inflowsAgg, expensesAgg, salesByCategory, expensesByCategory, recentSales, topExpenses] = await Promise.all([
       Sale.aggregate([
         { $match: { closedAt: { $gte: start, $lte: end } } },
         { 
@@ -538,6 +918,16 @@ exports.getAccountsReport = async (req, res) => {
             pendingReceivables: { $sum: '$remainingAmount' },
             count: { $sum: 1 } 
           } 
+        }
+      ]),
+      Inflow.aggregate([
+        { $match: { date: { $gte: start, $lte: end } } },
+        {
+          $group: {
+            _id: '$type',
+            totalAmount: { $sum: '$amount' },
+            count: { $sum: 1 }
+          }
         }
       ]),
       Expense.aggregate([
@@ -578,10 +968,17 @@ exports.getAccountsReport = async (req, res) => {
     const salesCount = salesAgg[0]?.count || 0;
     const expenseCount = expensesAgg[0]?.count || 0;
 
-    const realizedNetProfit = realizedSales - totalExpenses;
-    const realizedProfitMargin = realizedSales > 0 ? parseFloat(((realizedNetProfit / realizedSales) * 100).toFixed(1)) : 0;
-    const projectedNetProfit = bookedSales - totalExpenses;
-    const projectedProfitMargin = bookedSales > 0 ? parseFloat(((projectedNetProfit / bookedSales) * 100).toFixed(1)) : 0;
+    let otherIncome = 0;
+    let investments = 0;
+    inflowsAgg.forEach(i => {
+      if (i._id === 'other_income') otherIncome += i.totalAmount;
+      if (i._id === 'investment') investments += i.totalAmount;
+    });
+
+    const realizedNetProfit = (realizedSales + otherIncome) - totalExpenses;
+    const realizedProfitMargin = (realizedSales + otherIncome) > 0 ? parseFloat(((realizedNetProfit / (realizedSales + otherIncome)) * 100).toFixed(1)) : 0;
+    const projectedNetProfit = (bookedSales + otherIncome) - totalExpenses;
+    const projectedProfitMargin = (bookedSales + otherIncome) > 0 ? parseFloat(((projectedNetProfit / (bookedSales + otherIncome)) * 100).toFixed(1)) : 0;
 
     res.json({
       success: true,
@@ -594,13 +991,15 @@ exports.getAccountsReport = async (req, res) => {
         },
         kpis: {
           realizedSales,
+          otherIncome,
+          investments,
           bookedSales,
           pendingReceivables,
           realizedNetProfit,
           realizedProfitMargin,
           projectedNetProfit,
           projectedProfitMargin,
-          totalSales: realizedSales,
+          totalSales: realizedSales + otherIncome,
           totalExpenses,
           netProfit: realizedNetProfit,
           profitMargin: realizedProfitMargin,
@@ -675,7 +1074,9 @@ exports.exportAccountsExcel = async (req, res) => {
       extractedByName: s.leadGeneratedByName || 'Sales Agent',
       closedByName: s.closedByName || 'Super Admin',
       interestedProducts: s.products || [],
-      dealValue: s.totalAmount || 0
+      dealValue: s.totalAmount || 0,
+      advanceAmount: s.advanceAmount || 0,
+      remainingAmount: s.remainingAmount || 0
     }));
 
     await accountReportService.generateExcelWorkbook({
@@ -738,7 +1139,9 @@ exports.exportAccountsPdf = async (req, res) => {
       category: s.customer?.category || 'General',
       area: s.customer?.area || 'Lahore',
       extractedByName: s.leadGeneratedByName || 'Sales Agent',
-      dealValue: s.totalAmount || 0
+      dealValue: s.totalAmount || 0,
+      advanceAmount: s.advanceAmount || 0,
+      remainingAmount: s.remainingAmount || 0
     }));
 
     await accountReportService.generatePdfReport({

@@ -8,18 +8,22 @@ const getStartOfToday = () => {
 };
 
 /**
- * Super Admin: List all user profiles with live GMB extraction metrics
+ * Super Admin: List all user profiles with live GMB extraction metrics & referral info
  */
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().sort({ role: 1, createdAt: -1 }).lean();
+    const users = await User.find()
+      .populate('referredBy', 'name email roles')
+      .sort({ role: 1, createdAt: -1 })
+      .lean();
     const startOfToday = getStartOfToday();
 
     const enrichedUsers = await Promise.all(
       users.map(async (u) => {
-        const [usedToday, totalExtracted] = await Promise.all([
+        const [usedToday, totalExtracted, referredUsersCount] = await Promise.all([
           Lead.countDocuments({ extractedBy: u._id, createdAt: { $gte: startOfToday } }),
-          Lead.countDocuments({ extractedBy: u._id })
+          Lead.countDocuments({ extractedBy: u._id }),
+          User.countDocuments({ referredBy: u._id })
         ]);
 
         const isSuperAdmin = u.email === 'sales@megatrixai.com' || (u.roles && u.roles.includes('super_admin')) || u.role === 'superadmin';
@@ -30,6 +34,18 @@ exports.getUsers = async (req, res) => {
           userRoles = ['super_admin', ...userRoles.filter(r => r !== 'super_admin')];
         }
 
+        // Robust referral resolving
+        let resolvedRefId = null;
+        let resolvedRefName = u.referredByName || '';
+        if (u.referredBy) {
+          if (typeof u.referredBy === 'object' && u.referredBy._id) {
+            resolvedRefId = u.referredBy._id.toString();
+            if (!resolvedRefName) resolvedRefName = u.referredBy.name || '';
+          } else {
+            resolvedRefId = u.referredBy.toString();
+          }
+        }
+
         return {
           id: u._id,
           _id: u._id,
@@ -38,6 +54,10 @@ exports.getUsers = async (req, res) => {
           role: u.role,
           roles: userRoles,
           commissionRates: u.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
+          referredBy: resolvedRefId,
+          referredByName: resolvedRefName,
+          referralPercent: u.referralPercent || 0,
+          referredUsersCount,
           status: u.status,
           dailyGmbLimit: limit,
           usedToday,
@@ -59,11 +79,11 @@ exports.getUsers = async (req, res) => {
 };
 
 /**
- * Super Admin: Create new user profile with roles & commission rates
+ * Super Admin: Create new user profile with roles, commission rates & optional referral link
  */
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, dailyGmbLimit, roles, commissionRates } = req.body;
+    const { name, email, password, dailyGmbLimit, roles, commissionRates, referredBy, referralPercent } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -89,6 +109,20 @@ exports.createUser = async (req, res) => {
       developerPercent: assignedRoles.includes('developer') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.developerPercent) || 0)) : 0
     };
 
+    // Resolve Referrer
+    let resolvedReferredBy = null;
+    let resolvedReferredByName = '';
+    let resolvedReferralPercent = 0;
+
+    if (referredBy && referredBy !== 'none') {
+      const refUser = await User.findById(referredBy);
+      if (refUser) {
+        resolvedReferredBy = refUser._id;
+        resolvedReferredByName = refUser.name;
+        resolvedReferralPercent = Math.min(100, Math.max(0, parseFloat(referralPercent) || 0));
+      }
+    }
+
     const user = await User.create({
       name: name.trim(),
       email: cleanEmail,
@@ -96,6 +130,9 @@ exports.createUser = async (req, res) => {
       role: assignedRoles.includes('super_admin') ? 'superadmin' : 'agent',
       roles: assignedRoles,
       commissionRates: rates,
+      referredBy: resolvedReferredBy,
+      referredByName: resolvedReferredByName,
+      referralPercent: resolvedReferralPercent,
       status: 'active',
       dailyGmbLimit: isNaN(limit) || limit < 1 ? 150 : limit,
       mustChangePassword: true,
@@ -104,7 +141,7 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `User profile "${user.name}" created successfully.`,
+      message: `User profile "${user.name}" created successfully.${resolvedReferredByName ? ` (Referred by: ${resolvedReferredByName} @ ${resolvedReferralPercent}%)` : ''}`,
       data: {
         id: user._id,
         _id: user._id,
@@ -113,6 +150,9 @@ exports.createUser = async (req, res) => {
         role: user.role,
         roles: user.roles,
         commissionRates: user.commissionRates,
+        referredBy: user.referredBy,
+        referredByName: user.referredByName,
+        referralPercent: user.referralPercent,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit,
         mustChangePassword: user.mustChangePassword,
@@ -126,12 +166,12 @@ exports.createUser = async (req, res) => {
 };
 
 /**
- * Super Admin: Update user profile (roles, commission rates, limit, status [block/unblock], name, reset password)
+ * Super Admin: Update user profile (roles, commissions, limit, status, password, referral link)
  */
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, dailyGmbLimit, status, password, roles, commissionRates } = req.body;
+    const { name, dailyGmbLimit, status, password, roles, commissionRates, referredBy, referralPercent } = req.body;
 
     const user = await User.findById(id);
     if (!user) {
@@ -186,6 +226,31 @@ exports.updateUser = async (req, res) => {
       user.markModified('commissionRates');
     }
 
+    // Referral link management (linking, updating, or removing)
+    if (referredBy !== undefined) {
+      if (!referredBy || referredBy === 'none' || referredBy === '') {
+        user.referredBy = null;
+        user.referredByName = '';
+        user.referralPercent = 0;
+      } else {
+        if (referredBy.toString() === user._id.toString()) {
+          return res.status(400).json({
+            success: false,
+            message: 'A user cannot be linked as their own referrer.'
+          });
+        }
+        const refUser = await User.findById(referredBy);
+        if (refUser) {
+          user.referredBy = refUser._id;
+          user.referredByName = refUser.name;
+        }
+      }
+    }
+
+    if (referralPercent !== undefined) {
+      user.referralPercent = Math.min(100, Math.max(0, parseFloat(referralPercent) || 0));
+    }
+
     await user.save();
 
     res.json({
@@ -199,6 +264,9 @@ exports.updateUser = async (req, res) => {
         role: user.role,
         roles: user.roles,
         commissionRates: user.commissionRates,
+        referredBy: user.referredBy,
+        referredByName: user.referredByName,
+        referralPercent: user.referralPercent,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit
       }
@@ -227,6 +295,12 @@ exports.deleteUser = async (req, res) => {
         message: 'The Super Administrator account cannot be deleted.'
       });
     }
+
+    // If other users were referred by this user, clear their referrer
+    await User.updateMany(
+      { referredBy: user._id },
+      { $set: { referredBy: null, referredByName: '', referralPercent: 0 } }
+    );
 
     await User.findByIdAndDelete(id);
 

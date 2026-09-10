@@ -54,6 +54,8 @@ const SettingsView = () => {
     password: '',
     roles: ['sales_agent'],
     dailyGmbLimit: 150,
+    referredBy: '',
+    referralPercent: 0,
     commissionRates: {
       leadGenPercent: 0,
       closerPercent: 0,
@@ -68,6 +70,8 @@ const SettingsView = () => {
     name: '',
     dailyGmbLimit: 150,
     roles: [],
+    referredBy: '',
+    referralPercent: 0,
     commissionRates: {
       leadGenPercent: 0,
       closerPercent: 0,
@@ -196,6 +200,8 @@ const SettingsView = () => {
         password: newUserForm.password,
         roles: newUserForm.roles,
         dailyGmbLimit: parseInt(newUserForm.dailyGmbLimit, 10) || 150,
+        referredBy: newUserForm.referredBy || null,
+        referralPercent: parseFloat(newUserForm.referralPercent) || 0,
         commissionRates: {
           leadGenPercent: parseFloat(newUserForm.commissionRates.leadGenPercent) || 0,
           closerPercent: parseFloat(newUserForm.commissionRates.closerPercent) || 0,
@@ -216,6 +222,8 @@ const SettingsView = () => {
           password: '',
           roles: ['sales_agent'],
           dailyGmbLimit: 150,
+          referredBy: '',
+          referralPercent: 0,
           commissionRates: { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 }
         });
         fetchUsers();
@@ -238,11 +246,19 @@ const SettingsView = () => {
       ? u.roles 
       : (u.role === 'superadmin' ? ['super_admin'] : ['sales_agent']);
     
+    // Resolve referral id reliably
+    let refId = '';
+    if (u.referredBy) {
+      refId = typeof u.referredBy === 'object' && u.referredBy !== null ? (u.referredBy._id || u.referredBy.id || '') : String(u.referredBy);
+    }
+
     setEditingUser(u);
     setEditUserForm({
       name: u.name || '',
       dailyGmbLimit: u.dailyGmbLimit || 150,
       roles: [...userRoles],
+      referredBy: refId,
+      referralPercent: u.referralPercent || 0,
       commissionRates: {
         leadGenPercent: u.commissionRates?.leadGenPercent || 0,
         closerPercent: u.commissionRates?.closerPercent || 0,
@@ -266,6 +282,8 @@ const SettingsView = () => {
         name: editUserForm.name.trim(),
         dailyGmbLimit: parseInt(editUserForm.dailyGmbLimit, 10) || 150,
         roles: editUserForm.roles,
+        referredBy: editUserForm.referredBy || null,
+        referralPercent: parseFloat(editUserForm.referralPercent) || 0,
         commissionRates: {
           leadGenPercent: parseFloat(editUserForm.commissionRates.leadGenPercent) || 0,
           closerPercent: parseFloat(editUserForm.commissionRates.closerPercent) || 0,
@@ -461,7 +479,7 @@ const SettingsView = () => {
         </div>
 
         {/* Right Content Area */}
-        <div className="flex-1 w-full space-y-6">
+        <div className="flex-1 min-w-0 w-full space-y-6">
 
           {/* ─── TAB: USER MANAGEMENT (SUPER ADMIN ONLY) ──────────────────────── */}
           {activeTab === 'users' && isSuperAdmin && (
@@ -484,7 +502,7 @@ const SettingsView = () => {
                 <button
                   type="button"
                   onClick={() => setIsAddUserModalOpen(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all shrink-0"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Create Agent Profile</span>
@@ -492,108 +510,135 @@ const SettingsView = () => {
               </div>
 
               {/* Users Table */}
-              <div className="bg-[#080808] border border-[#222222] overflow-x-auto">
-                <table className="w-full text-left border-collapse font-mono text-xs">
-                  <thead>
-                    <tr className="border-b border-[#222222] bg-[#0C0C0C] text-zinc-400 uppercase tracking-wider text-[11px]">
-                      <th className="p-3.5">Agent / User</th>
-                      <th className="p-3.5">Assigned Roles</th>
-                      <th className="p-3.5">Commission Rates</th>
-                      <th className="p-3.5">Daily GMB Limit</th>
-                      <th className="p-3.5">Today's Usage</th>
-                      <th className="p-3.5">Total Extracted</th>
-                      <th className="p-3.5">Status</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#1A1A1A]">
-                    {loadingUsers ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-zinc-500">
-                          Loading agent profiles...
-                        </td>
+              <div className="bg-[#080808] border border-[#222222] overflow-hidden">
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-left border-collapse font-mono text-xs min-w-[960px]">
+                    <thead>
+                      <tr className="border-b border-[#222222] bg-[#0C0C0C] text-zinc-400 uppercase tracking-wider text-[11px]">
+                        <th className="p-3.5">Agent / User</th>
+                        <th className="p-3.5">Assigned Roles</th>
+                        <th className="p-3.5">Commission Rates</th>
+                        <th className="p-3.5">Referral &amp; Sponsor</th>
+                        <th className="p-3.5">Daily GMB Limit</th>
+                        <th className="p-3.5">Today's Usage</th>
+                        <th className="p-3.5">Total Extracted</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Actions</th>
                       </tr>
-                    ) : users.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-zinc-500">
-                          No users registered yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      users.map(u => {
-                        const isSelf = u._id === currentUser?._id;
-                        const isSuper = u.roles?.includes('super_admin') || u.role === 'superadmin' || u.email === 'sales@megatrixai.com';
-                        const userRoles = u.roles && u.roles.length > 0 
-                          ? u.roles 
-                          : (isSuper ? ['super_admin'] : ['sales_agent']);
+                    </thead>
+                    <tbody className="divide-y divide-[#1A1A1A]">
+                      {loadingUsers ? (
+                        <tr>
+                          <td colSpan={9} className="p-8 text-center text-zinc-500">
+                            Loading agent profiles...
+                          </td>
+                        </tr>
+                      ) : users.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="p-8 text-center text-zinc-500">
+                            No users registered yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map(u => {
+                          const isSelf = u._id === currentUser?._id;
+                          const isSuper = u.roles?.includes('super_admin') || u.role === 'superadmin' || u.email === 'sales@megatrixai.com';
+                          const userRoles = u.roles && u.roles.length > 0 
+                            ? u.roles 
+                            : (isSuper ? ['super_admin'] : ['sales_agent']);
 
-                        return (
-                          <tr key={u._id} className="hover:bg-[#121216] transition-colors">
-                            {/* User Name & Email */}
-                            <td className="p-3.5">
-                              <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{u.name}</span>
-                                {isSelf && (
-                                  <span className="text-[9px] px-1 bg-zinc-800 text-zinc-300 font-normal">YOU</span>
-                                )}
-                              </div>
-                              <div className="text-[10px] text-zinc-500 mt-0.5">{u.email}</div>
-                            </td>
+                          return (
+                            <tr key={u._id} className="hover:bg-[#121216] transition-colors">
+                              {/* User Name & Email */}
+                              <td className="p-3.5">
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  <span>{u.name}</span>
+                                  {isSelf && (
+                                    <span className="text-[9px] px-1 bg-zinc-800 text-zinc-300 font-normal">YOU</span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-zinc-500 mt-0.5">{u.email}</div>
+                              </td>
 
-                            {/* Assigned Roles */}
-                            <td className="p-3.5 whitespace-nowrap">
-                              <div className="flex flex-wrap gap-1.5 max-w-[240px]">
-                                {userRoles.map(r => {
-                                  let label = r;
-                                  let style = 'bg-zinc-900 text-zinc-300 border-zinc-700';
-                                  if (r === 'super_admin') {
-                                    label = 'SUPER ADMIN';
-                                    style = 'bg-purple-950/70 text-purple-300 border-purple-800';
-                                  } else if (r === 'sales_agent') {
-                                    label = 'SALES AGENT';
-                                    style = 'bg-blue-950/70 text-blue-300 border-blue-800';
-                                  } else if (r === 'sales_closer') {
-                                    label = 'CLOSER';
-                                    style = 'bg-emerald-950/70 text-emerald-300 border-emerald-800';
-                                  } else if (r === 'developer') {
-                                    label = 'DEVELOPER';
-                                    style = 'bg-amber-950/70 text-amber-300 border-amber-800';
-                                  }
-                                  return (
-                                    <span key={r} className={`px-2 py-0.5 text-[9px] uppercase font-bold rounded border ${style}`}>
-                                      {label}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </td>
+                              {/* Assigned Roles */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                <div className="flex flex-wrap gap-1.5 max-w-[240px]">
+                                  {userRoles.map(r => {
+                                    let label = r;
+                                    let style = 'bg-zinc-900 text-zinc-300 border-zinc-700';
+                                    if (r === 'super_admin') {
+                                      label = 'SUPER ADMIN';
+                                      style = 'bg-purple-950/70 text-purple-300 border-purple-800';
+                                    } else if (r === 'sales_agent') {
+                                      label = 'SALES AGENT';
+                                      style = 'bg-blue-950/70 text-blue-300 border-blue-800';
+                                    } else if (r === 'sales_closer') {
+                                      label = 'CLOSER';
+                                      style = 'bg-emerald-950/70 text-emerald-300 border-emerald-800';
+                                    } else if (r === 'developer') {
+                                      label = 'DEVELOPER';
+                                      style = 'bg-amber-950/70 text-amber-300 border-amber-800';
+                                    }
+                                    return (
+                                      <span key={r} className={`px-2 py-0.5 text-[9px] uppercase font-bold rounded border ${style}`}>
+                                        {label}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </td>
 
-                            {/* Commission Rates - Only show commissions for assigned roles */}
-                            <td className="p-3.5 whitespace-nowrap font-mono text-[11px]">
-                              <div className="space-y-1">
-                                {userRoles.includes('sales_agent') && (
-                                  <div className="text-zinc-400 flex items-center gap-1.5">
-                                    <span className="text-blue-400 font-bold">LG:</span>
-                                    <span className="text-white font-bold">{u.commissionRates?.leadGenPercent || 0}%</span>
-                                  </div>
-                                )}
-                                {userRoles.includes('sales_closer') && (
-                                  <div className="text-zinc-400 flex items-center gap-1.5">
-                                    <span className="text-emerald-400 font-bold">Closer:</span>
-                                    <span className="text-white font-bold">{u.commissionRates?.closerPercent || 0}%</span>
-                                  </div>
-                                )}
-                                {userRoles.includes('developer') && (
-                                  <div className="text-zinc-400 flex items-center gap-1.5">
-                                    <span className="text-amber-400 font-bold">Dev:</span>
-                                    <span className="text-white font-bold">{u.commissionRates?.developerPercent || 0}%</span>
-                                  </div>
-                                )}
-                                {!userRoles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) && (
-                                  <span className="text-zinc-600 font-semibold">—</span>
-                                )}
-                              </div>
-                            </td>
+                              {/* Commission Rates - Only show commissions for assigned roles */}
+                              <td className="p-3.5 whitespace-nowrap font-mono text-[11px]">
+                                <div className="space-y-1">
+                                  {userRoles.includes('sales_agent') && (
+                                    <div className="text-zinc-400 flex items-center gap-1.5">
+                                      <span className="text-blue-400 font-bold">LG:</span>
+                                      <span className="text-white font-bold">{u.commissionRates?.leadGenPercent || 0}%</span>
+                                    </div>
+                                  )}
+                                  {userRoles.includes('sales_closer') && (
+                                    <div className="text-zinc-400 flex items-center gap-1.5">
+                                      <span className="text-emerald-400 font-bold">Closer:</span>
+                                      <span className="text-white font-bold">{u.commissionRates?.closerPercent || 0}%</span>
+                                    </div>
+                                  )}
+                                  {userRoles.includes('developer') && (
+                                    <div className="text-zinc-400 flex items-center gap-1.5">
+                                      <span className="text-amber-400 font-bold">Dev:</span>
+                                      <span className="text-white font-bold">{u.commissionRates?.developerPercent || 0}%</span>
+                                    </div>
+                                  )}
+                                  {!userRoles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) && (
+                                    <span className="text-zinc-600 font-semibold">—</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Referral & Sponsor Details */}
+                              <td className="p-3.5 whitespace-nowrap text-[11px]">
+                                <div className="space-y-1">
+                                  {(u.referredBy || u.referredByName) ? (
+                                    <div className="text-zinc-300 flex items-center gap-1.5">
+                                      <span className="text-purple-400 font-bold">Ref:</span>
+                                      <span className="text-white font-semibold">
+                                        {u.referredByName || (users.find(x => (x._id === u.referredBy || x.id === u.referredBy))?.name) || 'Sponsor'}
+                                      </span>
+                                      <span className="px-1.5 py-0.2 bg-purple-950/80 border border-purple-800 text-purple-300 text-[9px] font-bold rounded">
+                                        {u.referralPercent || 0}%
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-zinc-500 italic text-[10px]">Direct Hire</div>
+                                  )}
+                                  {u.referredUsersCount > 0 && (
+                                    <div className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                                      <Users className="w-3 h-3 text-emerald-400 inline" />
+                                      <span>{u.referredUsersCount} Referred {u.referredUsersCount === 1 ? 'Agent' : 'Agents'}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
 
                             {/* Daily GMB Limit */}
                             <td className="p-3.5 whitespace-nowrap">
@@ -685,6 +730,7 @@ const SettingsView = () => {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
             </div>
@@ -1329,6 +1375,65 @@ const SettingsView = () => {
                 </div>
               )}
 
+              {/* Referral & Sponsorship System */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-purple-400" />
+                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                      Referral &amp; Sponsorship Link (Optional)
+                    </label>
+                  </div>
+                  <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
+                </div>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  If this employee joined via an existing agent's referral, select the referrer below. The referrer will earn the configured percentage on all closed &amp; settled sales by this user.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                      Referred By (Sponsoring Agent)
+                    </label>
+                    <select
+                      value={newUserForm.referredBy}
+                      onChange={(e) => setNewUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="">None / Direct Hire</option>
+                      {users.map(u => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                      Referral Commission Rate (%)
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder="0"
+                        disabled={!newUserForm.referredBy}
+                        value={newUserForm.referralPercent === 0 ? '' : newUserForm.referralPercent}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
+                        }}
+                        className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
+                          !newUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
+                        }`}
+                      />
+                      <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1E1E1E]">
                 <button
                   type="button"
@@ -1578,6 +1683,67 @@ const SettingsView = () => {
                   No commission rates applicable for current roles.
                 </div>
               )}
+
+              {/* Referral & Sponsorship System */}
+              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-purple-400" />
+                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                      Referral &amp; Sponsorship Link
+                    </label>
+                  </div>
+                  <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
+                </div>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  Configure or update who referred this agent and the commission percentage the referrer earns when this agent closes and settles sales.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                      Referred By (Sponsoring Agent)
+                    </label>
+                    <select
+                      value={editUserForm.referredBy}
+                      onChange={(e) => setEditUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="">None / Direct Hire (Remove Link)</option>
+                      {users
+                        .filter(u => (u._id || u.id) !== (editingUser._id || editingUser.id))
+                        .map(u => (
+                          <option key={u._id || u.id} value={u._id || u.id}>
+                            {u.name} ({u.email})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                      Referral Commission Rate (%)
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder="0"
+                        disabled={!editUserForm.referredBy}
+                        value={editUserForm.referralPercent === 0 ? '' : editUserForm.referralPercent}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
+                        }}
+                        className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
+                          !editUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
+                        }`}
+                      />
+                      <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#1E1E1E]">
                 <button

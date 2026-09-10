@@ -124,21 +124,70 @@ exports.getDashboardData = async (req, res) => {
     // ─── NON-SUPER ADMIN (SALES AGENT, CLOSER, DEVELOPER, OR MULTI-ROLE) ─────
     const earningsData = await calculateUserEarnings(user);
 
-    // Shared Total Earnings card (Only show once even if multi-role)
-    cards.push({
-      id: 'my_earnings',
-      label: 'My Total Earnings',
-      value: `PKR ${earningsData.totalEarnings.toLocaleString()}`,
-      numericValue: earningsData.totalEarnings,
-      subtext: `${earningsData.dealsCount} Commissionable Closed Deals`,
-      color: 'emerald',
-      drillDown: earningsData.itemized.map(item => ({
+    // Combined direct + referral drilldown items
+    const combinedEarningsDrill = [
+      ...earningsData.itemized.map(item => ({
         id: item.saleId,
         title: item.clientName,
         subtitle: (item.rolesEarned || []).map(r => `${r.role} (${r.percent}%)`).join(' + '),
         amount: `Earned: PKR ${item.dealEarnings.toLocaleString()}`,
         date: item.closedAt,
-        status: 'Commission Credited'
+        status: 'Direct Commission'
+      })),
+      ...earningsData.itemizedReferrals.map(item => ({
+        id: item.saleId,
+        title: `${item.clientName} (Referral: ${item.referredAgentName})`,
+        subtitle: `Agent: ${item.referredAgentName} • Rate: ${item.referralPercent}% of PKR ${item.totalSaleAmount.toLocaleString()}`,
+        amount: `Earned: PKR ${item.earnedAmount.toLocaleString()}`,
+        date: item.closedAt,
+        status: 'Referral Commission'
+      }))
+    ];
+
+    // Card 1: My Total Earnings (Direct Commissions + Referral Earnings)
+    cards.push({
+      id: 'my_earnings',
+      label: 'My Total Earnings',
+      value: `PKR ${earningsData.totalEarnings.toLocaleString()}`,
+      numericValue: earningsData.totalEarnings,
+      subtext: `Direct: PKR ${earningsData.directEarnings.toLocaleString()} • Referral: PKR ${earningsData.referralEarnings.toLocaleString()}`,
+      color: 'emerald',
+      drillDown: combinedEarningsDrill
+    });
+
+    // Card 2: Total Referrals (Count of employees joined via reference)
+    cards.push({
+      id: 'total_referrals',
+      label: 'Total Referrals',
+      value: earningsData.referralsCount,
+      numericValue: earningsData.referralsCount,
+      subtext: `${earningsData.referralsCount} Team Members Joined via Reference`,
+      color: 'purple',
+      drillDown: (earningsData.referredUsers || []).map(u => ({
+        id: u.id,
+        title: u.name,
+        subtitle: `${u.email} • Rate: ${u.referralPercent}% • Joined: ${new Date(u.joinedAt).toLocaleDateString()}`,
+        amount: `Total Commission Generated: PKR ${u.totalCommissionGenerated.toLocaleString()}`,
+        date: u.joinedAt,
+        status: `${u.dealsClosedCount} Deals Closed`
+      }))
+    });
+
+    // Card 3: Referrals Amount (Commission from referred agents' sales)
+    cards.push({
+      id: 'referrals_amount',
+      label: 'Referrals Amount',
+      value: `PKR ${earningsData.referralEarnings.toLocaleString()}`,
+      numericValue: earningsData.referralEarnings,
+      subtext: `Earned from ${earningsData.itemizedReferrals.length} Referred Sales`,
+      color: 'blue',
+      drillDown: (earningsData.itemizedReferrals || []).map(item => ({
+        id: item.saleId,
+        title: item.clientName,
+        subtitle: `Referred Agent: ${item.referredAgentName} • Deal: PKR ${item.totalSaleAmount.toLocaleString()} @ ${item.referralPercent}%`,
+        amount: `Earned: PKR ${item.earnedAmount.toLocaleString()}`,
+        date: item.closedAt,
+        status: 'Referral Commission'
       }))
     });
 

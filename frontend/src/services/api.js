@@ -98,6 +98,10 @@ export const ProductService = {
 
 export const AccountService = {
   getSummary: (params) => api.get('/accounts/summary', { params }),
+  getPendingSales: () => api.get('/accounts/pending-sales'),
+  getInflows: (params) => api.get('/accounts/inflows', { params }),
+  createInflow: (data) => api.post('/accounts/inflows', data),
+  deleteInflow: (id) => api.delete(`/accounts/inflows/${id}`),
   getSales: (params) => api.get('/accounts/sales', { params }),
   getExpenses: (params) => api.get('/accounts/expenses', { params }),
   createExpense: (data) => api.post('/accounts/expenses', data),

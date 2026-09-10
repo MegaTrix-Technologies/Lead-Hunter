@@ -4,9 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import AccountsOverviewTab from './AccountsOverviewTab';
 import SalesLedgerTab from './SalesLedgerTab';
+import InflowsLedgerTab from './InflowsLedgerTab';
 import ExpensesLedgerTab from './ExpensesLedgerTab';
 import FinancialReportTab from './FinancialReportTab';
 import ManualSaleModal from '../sales/ManualSaleModal';
+import AddMoneyModal from './AddMoneyModal';
 import { 
   Landmark, 
   BarChart3, 
@@ -20,7 +22,9 @@ import {
   Lock,
   ArrowDownToLine,
   Plus,
-  X
+  X,
+  Wallet,
+  Coins
 } from 'lucide-react';
 
 const AccountsManagerView = () => {
@@ -39,6 +43,10 @@ const AccountsManagerView = () => {
 
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Add Money / Inflow Modal State
+  const [isAddMoneyModalOpen, setIsAddMoneyModalOpen] = useState(false);
+  const [targetSaleIdForPayment, setTargetSaleIdForPayment] = useState(null);
 
   // Manual Sale Modal State (Super Admin)
   const [isManualSaleModalOpen, setIsManualSaleModalOpen] = useState(false);
@@ -106,6 +114,11 @@ const AccountsManagerView = () => {
     setAppliedCustomStart(customStart);
     setAppliedCustomEnd(customEnd);
     setPreset('custom');
+  };
+
+  const handleOpenAddMoneyForSale = (saleId) => {
+    setTargetSaleIdForPayment(saleId);
+    setIsAddMoneyModalOpen(true);
   };
 
   const handleExportExcel = async () => {
@@ -215,32 +228,64 @@ const AccountsManagerView = () => {
     <div className="space-y-6">
       
       {/* ─── MASTER HEADER BANNER ────────────────────────────────────────── */}
-      <div className="bg-[#0A0A0A] border border-[#262626] p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-[#0A0A0A] border border-[#262626] p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 font-mono">
         
         {/* Module Title & Role Badge */}
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-400 inline-block" />
-            <h1 className="text-base font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 bg-emerald-400 inline-block shadow-[0_0_8px_#10B981]" />
+            <h1 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <span>Accounts Manager &amp; Financial P&amp;L</span>
               <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-purple-950 text-purple-300 border border-purple-800">
                 Super Admin Restricted
               </span>
             </h1>
           </div>
-          <p className="text-xs text-zinc-400 font-mono mt-0.5">
+          <p className="text-xs text-zinc-400 mt-0.5">
             Consolidated organizational financial telemetry: Sales Inflow, Operating Outflow &amp; Net Profit Margin.
           </p>
         </div>
 
-        {/* Global Export & Refresh Actions */}
+        {/* Global Export & Quick Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
           
+          {/* Add Money (Inflow) Button - Prominent Emerald Highlight */}
+          <button
+            onClick={() => {
+              setTargetSaleIdForPayment(null);
+              setIsAddMoneyModalOpen(true);
+            }}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold uppercase flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] cursor-pointer"
+            title="Log partial project payment, investment capital, or other income"
+          >
+            <Coins className="w-3.5 h-3.5 text-black" />
+            <span>Add Money</span>
+          </button>
+
+          {/* Add Sale Button */}
+          <button
+            onClick={() => setIsManualSaleModalOpen(true)}
+            className="px-3.5 py-2 bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 text-xs font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Create direct manual sale"
+          >
+            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Add Sale</span>
+          </button>
+
+          {/* Add Expense Button */}
+          <button
+            onClick={() => setIsExpenseModalOpen(true)}
+            className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/80 text-xs font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 text-rose-400" />
+            <span>Add Expense</span>
+          </button>
+
           {/* Excel Export Button */}
           <button
             onClick={handleExportExcel}
             disabled={exportingExcel}
-            className="px-3.5 py-2 bg-[#121E17] hover:bg-[#1A2E23] text-emerald-300 border border-emerald-800/80 text-xs font-mono font-bold uppercase flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-3.5 py-2 bg-[#121E17] hover:bg-[#1A2E23] text-emerald-300 border border-emerald-800/80 text-xs font-bold uppercase flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
             title="Download formatted multi-tab Excel spreadsheet with totals"
           >
             {exportingExcel ? (
@@ -248,14 +293,14 @@ const AccountsManagerView = () => {
             ) : (
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
             )}
-            <span>Export Excel (.xlsx)</span>
+            <span>Export Excel</span>
           </button>
 
           {/* PDF Export Button */}
           <button
             onClick={handleExportPdf}
             disabled={exportingPdf}
-            className="px-3.5 py-2 bg-[#161D2E] hover:bg-[#1E2B47] text-blue-300 border border-blue-800/80 text-xs font-mono font-bold uppercase flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-3.5 py-2 bg-[#161D2E] hover:bg-[#1E2B47] text-blue-300 border border-blue-800/80 text-xs font-bold uppercase flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
             title="Download executive PDF dossier"
           >
             {exportingPdf ? (
@@ -266,29 +311,10 @@ const AccountsManagerView = () => {
             <span>Export PDF</span>
           </button>
 
-          {/* Add Sale Button (Super Admin Only) */}
-          <button
-            onClick={() => setIsManualSaleModalOpen(true)}
-            className="px-3.5 py-2 bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Create direct sale and log inflow"
-          >
-            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Add Sale</span>
-          </button>
-
-          {/* Add Expense Button */}
-          <button
-            onClick={() => setIsExpenseModalOpen(true)}
-            className="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/80 text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-rose-400" />
-            <span>Add Expense</span>
-          </button>
-
           {/* Refresh Button */}
           <button
             onClick={fetchSummary}
-            className="p-2 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 hover:text-white border border-[#2B2B2B] text-xs font-mono cursor-pointer transition-colors"
+            className="p-2 bg-[#141414] hover:bg-[#1E1E1E] text-zinc-400 hover:text-white border border-[#2B2B2B] text-xs cursor-pointer transition-colors"
             title="Refresh financial data"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -370,17 +396,34 @@ const AccountsManagerView = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('sales')}
+          onClick={() => setActiveTab('inflows')}
           className={`px-4 py-2.5 border-b-2 font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer ${
-            activeTab === 'sales'
+            activeTab === 'inflows'
               ? 'border-emerald-500 text-white bg-emerald-950/20'
               : 'border-transparent text-zinc-400 hover:text-white hover:bg-[#0A0A0A]'
           }`}
         >
-          <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+          <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Inflows Ledger</span>
+          {summaryData?.summary?.inflowCount > 0 && (
+            <span className="px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px]">
+              {summaryData.summary.inflowCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sales')}
+          className={`px-4 py-2.5 border-b-2 font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer ${
+            activeTab === 'sales'
+              ? 'border-blue-500 text-white bg-blue-950/20'
+              : 'border-transparent text-zinc-400 hover:text-white hover:bg-[#0A0A0A]'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5 text-blue-400" />
           <span>Sales Ledger</span>
           {summaryData?.summary?.salesCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px]">
+            <span className="px-1.5 py-0.2 bg-blue-950 text-blue-300 border border-blue-800 text-[10px]">
               {summaryData.summary.salesCount}
             </span>
           )}
@@ -430,10 +473,22 @@ const AccountsManagerView = () => {
             />
           )}
 
+          {activeTab === 'inflows' && (
+            <InflowsLedgerTab 
+              periodParams={periodParams}
+              onAddMoney={() => {
+                setTargetSaleIdForPayment(null);
+                setIsAddMoneyModalOpen(true);
+              }}
+              refreshSummary={fetchSummary}
+            />
+          )}
+
           {activeTab === 'sales' && (
             <SalesLedgerTab 
               periodParams={periodParams} 
               onAddSale={() => setIsManualSaleModalOpen(true)}
+              onCollectPayment={handleOpenAddMoneyForSale}
             />
           )}
 
@@ -455,6 +510,17 @@ const AccountsManagerView = () => {
           )}
         </>
       )}
+
+      {/* ─── ADD MONEY / INFLOW MODAL ────────────────────────────────────── */}
+      <AddMoneyModal
+        isOpen={isAddMoneyModalOpen}
+        onClose={() => {
+          setIsAddMoneyModalOpen(false);
+          setTargetSaleIdForPayment(null);
+        }}
+        onSuccess={fetchSummary}
+        initialSaleId={targetSaleIdForPayment}
+      />
 
       {/* ─── ADD EXPENSE MODAL ──────────────────────────────────────────────── */}
       {isExpenseModalOpen && (
