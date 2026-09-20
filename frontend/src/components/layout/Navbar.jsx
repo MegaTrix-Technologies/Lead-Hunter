@@ -110,21 +110,22 @@ const Navbar = () => {
           {/* Brand Logo - Standalone Without Any Box or Borders */}
           <div 
             onClick={() => setActiveView('dashboard')}
-            className="flex items-center gap-3.5 cursor-pointer select-none group py-1.5"
+            className="flex items-center gap-3.5 cursor-pointer select-none py-1.5"
           >
             <img 
               src="/megatrix-icon.svg" 
               alt="MegaTrix Technologies" 
-              className="h-9 sm:h-11 w-auto object-contain transition-transform group-hover:scale-105"
+              className="h-9 sm:h-11 w-auto object-contain"
               onError={(e) => {
                 e.target.style.display = 'none';
               }}
             />
-            <div className="flex flex-col justify-center max-w-0 overflow-hidden opacity-0 group-hover:max-w-[300px] group-hover:opacity-100 transition-all duration-300 ease-out whitespace-nowrap">
-              <span className="font-mono font-bold text-sm tracking-wider text-white uppercase group-hover:text-zinc-200 transition-colors">
-                MEGATRIX TECHNOLOGIES
+            <div className="flex flex-col justify-center whitespace-nowrap" style={{ fontFamily: "'Orbitron', sans-serif" }}>
+              <span className="font-bold text-sm tracking-wider uppercase">
+                <span className="text-white">MEGATRIX</span>{' '}
+                <span className="text-blue-500">TECHNOLOGIES</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-400 tracking-wider uppercase mt-0.5">
+              <span className="text-[10px] text-zinc-500 tracking-wider uppercase mt-0.5" style={{ fontFamily: "'Orbitron', sans-serif" }}>
                 Customer Relationship Manager
               </span>
             </div>
