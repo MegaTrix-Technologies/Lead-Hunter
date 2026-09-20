@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor } from 'lucide-react';
 
 const MIN_WIDTH = 1024;
 
@@ -24,11 +23,6 @@ const DeviceGate = ({ children }) => {
         className="w-28 mb-8 drop-shadow-2xl"
         onError={(e) => { e.target.style.display = 'none'; }}
       />
-
-      {/* Icon */}
-      <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6">
-        <Monitor className="w-7 h-7 text-blue-500" />
-      </div>
 
       {/* Heading */}
       <h1
