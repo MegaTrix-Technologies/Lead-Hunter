@@ -1150,9 +1150,15 @@ const SettingsView = () => {
 
       {/* ─── MODAL 1: CREATE USER PROFILE MODAL ─────────────────────────────── */}
       {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl p-6 sm:p-8 space-y-5 shadow-2xl relative font-mono my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div 
+            className="fixed inset-0 bg-transparent" 
+            onClick={() => setIsAddUserModalOpen(false)} 
+          />
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl shadow-2xl relative font-mono flex flex-col max-h-[92vh] sm:max-h-[88vh] z-10 overflow-hidden">
+            
+            {/* Pinned Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#1E1E1E] bg-[#0A0A0A] shrink-0">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-400" />
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider">
@@ -1162,279 +1168,286 @@ const SettingsView = () => {
               <button
                 type="button"
                 onClick={() => setIsAddUserModalOpen(false)}
-                className="text-zinc-500 hover:text-white cursor-pointer"
+                className="text-zinc-500 hover:text-white cursor-pointer p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Alex Morgan"
-                    value={newUserForm.name}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
+            {/* Form wrapping body and footer */}
+            <form onSubmit={handleCreateUser} className="flex flex-col flex-1 overflow-hidden min-h-0 text-xs">
+              
+              {/* Scrollable Form Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Alex Morgan"
+                      value={newUserForm.name}
+                      onChange={(e) => setNewUserForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. alex@megatrixai.com"
+                      value={newUserForm.email}
+                      onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="e.g. alex@megatrixai.com"
-                    value={newUserForm.email}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
-                </div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Initial Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Min 6 characters"
+                      value={newUserForm.password}
+                      onChange={(e) => setNewUserForm(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Initial Password *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Min 6 characters"
-                    value={newUserForm.password}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, password: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Daily GMB Limit (Profiles/Day)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="5000"
+                      required
+                      value={newUserForm.dailyGmbLimit}
+                      onChange={(e) => setNewUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Daily GMB Limit (Profiles/Day)
+                {/* Roles Selection (Checkboxes) */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                  <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                    Assign Roles (Select all that apply) *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5000"
-                    required
-                    value={newUserForm.dailyGmbLimit}
-                    onChange={(e) => setNewUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Roles Selection (Checkboxes) */}
-              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
-                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                  Assign Roles (Select all that apply) *
-                </label>
-                <div className="space-y-2 pt-1">
-                  {[
-                    { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
-                    { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
-                    { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
-                  ].map(r => {
-                    const checked = newUserForm.roles.includes(r.id);
-                    return (
-                      <div 
-                        key={r.id} 
-                        onClick={() => {
-                          if (checked) {
-                            setNewUserForm(prev => ({
-                              ...prev,
-                              roles: prev.roles.filter(id => id !== r.id),
-                              commissionRates: {
-                                ...prev.commissionRates,
-                                [r.id === 'sales_agent' ? 'leadGenPercent' : r.id === 'sales_closer' ? 'closerPercent' : 'developerPercent']: 0
-                              }
-                            }));
-                          } else {
-                            setNewUserForm(prev => ({
-                              ...prev,
-                              roles: [...prev.roles, r.id]
-                            }));
-                          }
-                        }}
-                        className={`flex items-start gap-2.5 p-2.5 border cursor-pointer select-none transition-colors ${
-                          checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {}}
-                          className="mt-0.5 rounded-none accent-blue-500 pointer-events-none"
-                        />
-                        <div>
-                          <div className="font-bold text-xs">{r.label}</div>
-                          <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                  <div className="space-y-2 pt-1">
+                    {[
+                      { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
+                      { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
+                      { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
+                    ].map(r => {
+                      const checked = newUserForm.roles.includes(r.id);
+                      return (
+                        <div 
+                          key={r.id} 
+                          onClick={() => {
+                            if (checked) {
+                              setNewUserForm(prev => ({
+                                ...prev,
+                                roles: prev.roles.filter(id => id !== r.id),
+                                commissionRates: {
+                                  ...prev.commissionRates,
+                                  [r.id === 'sales_agent' ? 'leadGenPercent' : r.id === 'sales_closer' ? 'closerPercent' : 'developerPercent']: 0
+                                }
+                              }));
+                            } else {
+                              setNewUserForm(prev => ({
+                                ...prev,
+                                roles: [...prev.roles, r.id]
+                              }));
+                            }
+                          }}
+                          className={`flex items-start gap-2.5 p-2.5 border cursor-pointer select-none transition-colors ${
+                            checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded-none accent-blue-500 pointer-events-none"
+                          />
+                          <div>
+                            <div className="font-bold text-xs">{r.label}</div>
+                            <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Commission Rates - Only displayed for selected roles */}
-              {newUserForm.roles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) ? (
-                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2.5">
+                {/* Commission Rates - Only displayed for selected roles */}
+                {newUserForm.roles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) ? (
+                  <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Commission Rates (% of Sale Amount upon Full Cash Collection)
+                      </label>
+                      <span className="text-[10px] text-zinc-500">Applies to selected roles</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      {newUserForm.roles.includes('sales_agent') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-blue-900/50 space-y-1">
+                          <label className="block text-[10px] text-blue-400 uppercase font-bold">Sales Agent (Lead Gen %)</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={newUserForm.commissionRates.leadGenPercent === 0 ? '' : newUserForm.commissionRates.leadGenPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNewUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, leadGenPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited when sale completes</span>
+                        </div>
+                      )}
+                      {newUserForm.roles.includes('sales_closer') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-emerald-900/50 space-y-1">
+                          <label className="block text-[10px] text-emerald-400 uppercase font-bold">Sales Closer %</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={newUserForm.commissionRates.closerPercent === 0 ? '' : newUserForm.commissionRates.closerPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNewUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, closerPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-emerald-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited when deal is fully paid</span>
+                        </div>
+                      )}
+                      {newUserForm.roles.includes('developer') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-amber-900/50 space-y-1">
+                          <label className="block text-[10px] text-amber-400 uppercase font-bold">Developer %</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={newUserForm.commissionRates.developerPercent === 0 ? '' : newUserForm.commissionRates.developerPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNewUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, developerPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-amber-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited on project completion</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#050505] border border-[#1E1E1E] text-zinc-500 text-[11px] italic">
+                    Select at least one role to configure commission rates.
+                  </div>
+                )}
+
+                {/* Referral & Sponsorship System */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                      Commission Rates (% of Sale Amount upon Full Cash Collection)
-                    </label>
-                    <span className="text-[10px] text-zinc-500">Applies to selected roles</span>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-purple-400" />
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Referral &amp; Sponsorship Link (Optional)
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                    {newUserForm.roles.includes('sales_agent') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-blue-900/50 space-y-1">
-                        <label className="block text-[10px] text-blue-400 uppercase font-bold">Sales Agent (Lead Gen %)</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={newUserForm.commissionRates.leadGenPercent === 0 ? '' : newUserForm.commissionRates.leadGenPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNewUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, leadGenPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited when sale completes</span>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    If this employee joined via an existing agent's referral, select the referrer below. The referrer will earn the configured percentage on all closed &amp; settled sales by this user.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                        Referred By (Sponsoring Agent)
+                      </label>
+                      <select
+                        value={newUserForm.referredBy}
+                        onChange={(e) => setNewUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
+                        className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
+                      >
+                        <option value="">None / Direct Hire</option>
+                        {users.map(u => (
+                          <option key={u._id} value={u._id}>
+                            {u.name} ({u.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                        Referral Commission Rate (%)
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          placeholder="0"
+                          disabled={!newUserForm.referredBy}
+                          value={newUserForm.referralPercent === 0 ? '' : newUserForm.referralPercent}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
+                          }}
+                          className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
+                            !newUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
+                          }`}
+                        />
+                        <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
                       </div>
-                    )}
-                    {newUserForm.roles.includes('sales_closer') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-emerald-900/50 space-y-1">
-                        <label className="block text-[10px] text-emerald-400 uppercase font-bold">Sales Closer %</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={newUserForm.commissionRates.closerPercent === 0 ? '' : newUserForm.commissionRates.closerPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNewUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, closerPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-emerald-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited when deal is fully paid</span>
-                      </div>
-                    )}
-                    {newUserForm.roles.includes('developer') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-amber-900/50 space-y-1">
-                        <label className="block text-[10px] text-amber-400 uppercase font-bold">Developer %</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={newUserForm.commissionRates.developerPercent === 0 ? '' : newUserForm.commissionRates.developerPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNewUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, developerPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-amber-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited on project completion</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-[#050505] border border-[#1E1E1E] text-zinc-500 text-[11px] italic">
-                  Select at least one role to configure commission rates.
-                </div>
-              )}
-
-              {/* Referral & Sponsorship System */}
-              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-purple-400" />
-                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                      Referral &amp; Sponsorship Link (Optional)
-                    </label>
-                  </div>
-                  <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
-                </div>
-                <p className="text-[10px] text-zinc-400 leading-relaxed">
-                  If this employee joined via an existing agent's referral, select the referrer below. The referrer will earn the configured percentage on all closed &amp; settled sales by this user.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
-                      Referred By (Sponsoring Agent)
-                    </label>
-                    <select
-                      value={newUserForm.referredBy}
-                      onChange={(e) => setNewUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
-                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
-                    >
-                      <option value="">None / Direct Hire</option>
-                      {users.map(u => (
-                        <option key={u._id} value={u._id}>
-                          {u.name} ({u.email})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
-                      Referral Commission Rate (%)
-                    </label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.5"
-                        placeholder="0"
-                        disabled={!newUserForm.referredBy}
-                        value={newUserForm.referralPercent === 0 ? '' : newUserForm.referralPercent}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setNewUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
-                        }}
-                        className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
-                          !newUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
-                        }`}
-                      />
-                      <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
                     </div>
                   </div>
                 </div>
+
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1E1E1E]">
+              {/* Pinned Modal Footer */}
+              <div className="flex items-center justify-end gap-3 p-4 sm:p-5 border-t border-[#1E1E1E] bg-[#0A0A0A] shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddUserModalOpen(false)}
@@ -1458,9 +1471,15 @@ const SettingsView = () => {
 
       {/* ─── MODAL 2: EDIT USER PROFILE, ROLES & COMMISSIONS MODAL ──────────── */}
       {editingUser && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl p-6 sm:p-8 space-y-5 shadow-2xl relative font-mono text-xs my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1E1E1E]">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/90 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div 
+            className="fixed inset-0 bg-transparent" 
+            onClick={() => setEditingUser(null)} 
+          />
+          <div className="bg-[#0A0A0A] border border-[#2B2B2B] w-full max-w-2xl lg:max-w-3xl shadow-2xl relative font-mono text-xs flex flex-col max-h-[92vh] sm:max-h-[88vh] z-10 overflow-hidden">
+            
+            {/* Pinned Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#1E1E1E] bg-[#0A0A0A] shrink-0">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-blue-400" />
                 <h3 className="font-bold text-white uppercase tracking-wider">
@@ -1470,282 +1489,289 @@ const SettingsView = () => {
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
-                className="text-zinc-500 hover:text-white cursor-pointer"
+                className="text-zinc-500 hover:text-white cursor-pointer p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveUser} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editUserForm.name}
-                    onChange={(e) => setEditUserForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
+            {/* Form wrapping body and footer */}
+            <form onSubmit={handleSaveUser} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              
+              {/* Scrollable Form Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editUserForm.name}
+                      onChange={(e) => setEditUserForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={editingUser.email}
+                      className="w-full px-3 py-2 bg-[#121212] border border-[#262626] text-zinc-500 font-mono cursor-not-allowed"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={editingUser.email}
-                    className="w-full px-3 py-2 bg-[#121212] border border-[#262626] text-zinc-500 font-mono cursor-not-allowed"
-                  />
-                </div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Daily GMB Extraction Limit
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="5000"
+                      required
+                      value={editUserForm.dailyGmbLimit}
+                      onChange={(e) => setEditUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Daily GMB Extraction Limit
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5000"
-                    required
-                    value={editUserForm.dailyGmbLimit}
-                    onChange={(e) => setEditUserForm(prev => ({ ...prev, dailyGmbLimit: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
+                  <div>
+                    <label className="block text-zinc-400 font-bold uppercase mb-1">
+                      Reset Password (Optional)
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Leave blank to keep unchanged"
+                      value={editUserForm.password}
+                      onChange={(e) => setEditUserForm(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 font-bold uppercase mb-1">
-                    Reset Password (Optional)
+                {/* Roles Selection (Checkboxes) */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                  <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                    Assigned Roles (Select all that apply) *
                   </label>
-                  <input
-                    type="password"
-                    placeholder="Leave blank to keep unchanged"
-                    value={editUserForm.password}
-                    onChange={(e) => setEditUserForm(prev => ({ ...prev, password: e.target.value }))}
-                    className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-blue-500 text-white font-mono focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Roles Selection (Checkboxes) */}
-              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
-                <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                  Assigned Roles (Select all that apply) *
-                </label>
-                <div className="space-y-2 pt-1">
-                  {[
-                    { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
-                    { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
-                    { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
-                  ].map(r => {
-                    const checked = editUserForm.roles.includes(r.id);
-                    return (
-                      <div 
-                        key={r.id} 
-                        onClick={() => {
-                          if (checked) {
-                            setEditUserForm(prev => ({
-                              ...prev,
-                              roles: prev.roles.filter(id => id !== r.id),
-                              commissionRates: {
-                                ...prev.commissionRates,
-                                [r.id === 'sales_agent' ? 'leadGenPercent' : r.id === 'sales_closer' ? 'closerPercent' : 'developerPercent']: 0
-                              }
-                            }));
-                          } else {
-                            setEditUserForm(prev => ({
-                              ...prev,
-                              roles: [...prev.roles, r.id]
-                            }));
-                          }
-                        }}
-                        className={`flex items-start gap-2.5 p-2.5 border cursor-pointer select-none transition-colors ${
-                          checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {}}
-                          className="mt-0.5 rounded-none accent-blue-500 pointer-events-none"
-                        />
-                        <div>
-                          <div className="font-bold text-xs">{r.label}</div>
-                          <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                  <div className="space-y-2 pt-1">
+                    {[
+                      { id: 'sales_agent', label: 'Sales Agent', desc: 'Lead generation & cold calling workstation access' },
+                      { id: 'sales_closer', label: 'Sales Closer', desc: 'Access to closer queue, deal negotiation & payment entries' },
+                      { id: 'developer', label: 'Developer', desc: 'Project delivery assignments, delivery notes & completion' }
+                    ].map(r => {
+                      const checked = editUserForm.roles.includes(r.id);
+                      return (
+                        <div 
+                          key={r.id} 
+                          onClick={() => {
+                            if (checked) {
+                              setEditUserForm(prev => ({
+                                ...prev,
+                                roles: prev.roles.filter(id => id !== r.id),
+                                commissionRates: {
+                                  ...prev.commissionRates,
+                                  [r.id === 'sales_agent' ? 'leadGenPercent' : r.id === 'sales_closer' ? 'closerPercent' : 'developerPercent']: 0
+                                }
+                              }));
+                            } else {
+                              setEditUserForm(prev => ({
+                                ...prev,
+                                roles: [...prev.roles, r.id]
+                              }));
+                            }
+                          }}
+                          className={`flex items-start gap-2.5 p-2.5 border cursor-pointer select-none transition-colors ${
+                            checked ? 'bg-[#121218] border-blue-500/80 text-white' : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded-none accent-blue-500 pointer-events-none"
+                          />
+                          <div>
+                            <div className="font-bold text-xs">{r.label}</div>
+                            <div className="text-[10px] text-zinc-500">{r.desc}</div>
+                          </div>
                         </div>
+                      );
+                    })}
+                    {editUserForm.roles.includes('super_admin') && (
+                      <div className="p-2.5 bg-purple-950/40 border border-purple-800 text-purple-300 text-[11px] font-bold">
+                        Super Administrator Role Active (Root System Privileges)
                       </div>
-                    );
-                  })}
-                  {editUserForm.roles.includes('super_admin') && (
-                    <div className="p-2.5 bg-purple-950/40 border border-purple-800 text-purple-300 text-[11px] font-bold">
-                      Super Administrator Role Active (Root System Privileges)
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Commission Rates - Only displayed for selected roles */}
-              {editUserForm.roles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) ? (
-                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2.5">
+                {/* Commission Rates - Only displayed for selected roles */}
+                {editUserForm.roles.some(r => ['sales_agent', 'sales_closer', 'developer'].includes(r)) ? (
+                  <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Commission Rates (% of Sale Amount upon Full Cash Collection)
+                      </label>
+                      <span className="text-[10px] text-zinc-500">Applies to selected roles</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      {editUserForm.roles.includes('sales_agent') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-blue-900/50 space-y-1">
+                          <label className="block text-[10px] text-blue-400 uppercase font-bold">Sales Agent (Lead Gen %)</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={editUserForm.commissionRates.leadGenPercent === 0 ? '' : editUserForm.commissionRates.leadGenPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, leadGenPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited when sale completes</span>
+                        </div>
+                      )}
+                      {editUserForm.roles.includes('sales_closer') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-emerald-900/50 space-y-1">
+                          <label className="block text-[10px] text-emerald-400 uppercase font-bold">Sales Closer %</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={editUserForm.commissionRates.closerPercent === 0 ? '' : editUserForm.commissionRates.closerPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, closerPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-emerald-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited when deal is fully paid</span>
+                        </div>
+                      )}
+                      {editUserForm.roles.includes('developer') && (
+                        <div className="p-2.5 bg-[#0A0A0A] border border-amber-900/50 space-y-1">
+                          <label className="block text-[10px] text-amber-400 uppercase font-bold">Developer %</label>
+                          <div className="relative flex items-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              placeholder="0"
+                              value={editUserForm.commissionRates.developerPercent === 0 ? '' : editUserForm.commissionRates.developerPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditUserForm(prev => ({
+                                  ...prev,
+                                  commissionRates: { ...prev.commissionRates, developerPercent: val === '' ? 0 : parseFloat(val) || 0 }
+                                }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-amber-500 focus:outline-none pr-6"
+                            />
+                            <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block">Credited on project completion</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#050505] border border-[#1E1E1E] text-zinc-500 text-[11px] italic">
+                    No commission rates applicable for current roles.
+                  </div>
+                )}
+
+                {/* Referral & Sponsorship System */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                      Commission Rates (% of Sale Amount upon Full Cash Collection)
-                    </label>
-                    <span className="text-[10px] text-zinc-500">Applies to selected roles</span>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-purple-400" />
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Referral &amp; Sponsorship Link
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                    {editUserForm.roles.includes('sales_agent') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-blue-900/50 space-y-1">
-                        <label className="block text-[10px] text-blue-400 uppercase font-bold">Sales Agent (Lead Gen %)</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={editUserForm.commissionRates.leadGenPercent === 0 ? '' : editUserForm.commissionRates.leadGenPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, leadGenPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-blue-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited when sale completes</span>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    Configure or update who referred this agent and the commission percentage the referrer earns when this agent closes and settles sales.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                        Referred By (Sponsoring Agent)
+                      </label>
+                      <select
+                        value={editUserForm.referredBy}
+                        onChange={(e) => setEditUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
+                        className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
+                      >
+                        <option value="">None / Direct Hire (Remove Link)</option>
+                        {users
+                          .filter(u => (u._id || u.id) !== (editingUser._id || editingUser.id))
+                          .map(u => (
+                            <option key={u._id || u.id} value={u._id || u.id}>
+                              {u.name} ({u.email})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
+                        Referral Commission Rate (%)
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          placeholder="0"
+                          disabled={!editUserForm.referredBy}
+                          value={editUserForm.referralPercent === 0 ? '' : editUserForm.referralPercent}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
+                          }}
+                          className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
+                            !editUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
+                          }`}
+                        />
+                        <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
                       </div>
-                    )}
-                    {editUserForm.roles.includes('sales_closer') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-emerald-900/50 space-y-1">
-                        <label className="block text-[10px] text-emerald-400 uppercase font-bold">Sales Closer %</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={editUserForm.commissionRates.closerPercent === 0 ? '' : editUserForm.commissionRates.closerPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, closerPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-emerald-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited when deal is fully paid</span>
-                      </div>
-                    )}
-                    {editUserForm.roles.includes('developer') && (
-                      <div className="p-2.5 bg-[#0A0A0A] border border-amber-900/50 space-y-1">
-                        <label className="block text-[10px] text-amber-400 uppercase font-bold">Developer %</label>
-                        <div className="relative flex items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.5"
-                            placeholder="0"
-                            value={editUserForm.commissionRates.developerPercent === 0 ? '' : editUserForm.commissionRates.developerPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditUserForm(prev => ({
-                                ...prev,
-                                commissionRates: { ...prev.commissionRates, developerPercent: val === '' ? 0 : parseFloat(val) || 0 }
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-black border border-[#262626] text-white text-xs font-mono focus:border-amber-500 focus:outline-none pr-6"
-                          />
-                          <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 block">Credited on project completion</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-[#050505] border border-[#1E1E1E] text-zinc-500 text-[11px] italic">
-                  No commission rates applicable for current roles.
-                </div>
-              )}
-
-              {/* Referral & Sponsorship System */}
-              <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-purple-400" />
-                    <label className="block text-zinc-300 font-bold uppercase text-[11px]">
-                      Referral &amp; Sponsorship Link
-                    </label>
-                  </div>
-                  <span className="text-[10px] text-zinc-500">Agent Onboarding Commission</span>
-                </div>
-                <p className="text-[10px] text-zinc-400 leading-relaxed">
-                  Configure or update who referred this agent and the commission percentage the referrer earns when this agent closes and settles sales.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
-                      Referred By (Sponsoring Agent)
-                    </label>
-                    <select
-                      value={editUserForm.referredBy}
-                      onChange={(e) => setEditUserForm(prev => ({ ...prev, referredBy: e.target.value }))}
-                      className="w-full px-3 py-2 bg-black border border-[#262626] focus:border-purple-500 text-white font-mono text-xs focus:outline-none cursor-pointer"
-                    >
-                      <option value="">None / Direct Hire (Remove Link)</option>
-                      {users
-                        .filter(u => (u._id || u.id) !== (editingUser._id || editingUser.id))
-                        .map(u => (
-                          <option key={u._id || u.id} value={u._id || u.id}>
-                            {u.name} ({u.email})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-zinc-400 uppercase font-bold mb-1">
-                      Referral Commission Rate (%)
-                    </label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.5"
-                        placeholder="0"
-                        disabled={!editUserForm.referredBy}
-                        value={editUserForm.referralPercent === 0 ? '' : editUserForm.referralPercent}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditUserForm(prev => ({ ...prev, referralPercent: val === '' ? 0 : parseFloat(val) || 0 }));
-                        }}
-                        className={`w-full px-3 py-2 bg-black border border-[#262626] text-white text-xs font-mono focus:border-purple-500 focus:outline-none pr-6 ${
-                          !editUserForm.referredBy ? 'opacity-40 cursor-not-allowed' : ''
-                        }`}
-                      />
-                      <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
                     </div>
                   </div>
                 </div>
+
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#1E1E1E]">
+              {/* Pinned Modal Footer */}
+              <div className="flex items-center justify-end gap-2.5 p-4 sm:p-5 border-t border-[#1E1E1E] bg-[#0A0A0A] shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}

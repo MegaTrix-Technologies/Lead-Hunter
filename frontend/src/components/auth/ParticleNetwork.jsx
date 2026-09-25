@@ -11,32 +11,50 @@ const ParticleNetwork = ({ className = '' }) => {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    let width = canvas.width;
-    let height = canvas.height;
+    let width = canvas.parentElement ? canvas.parentElement.clientWidth : window.innerWidth;
+    let height = canvas.parentElement ? canvas.parentElement.clientHeight : window.innerHeight;
 
     const handleResize = () => {
       if (!canvas.parentElement) return;
-      width = canvas.parentElement.clientWidth;
-      height = canvas.parentElement.clientHeight;
-      canvas.width = width;
-      canvas.height = height;
+      const newWidth = canvas.parentElement.clientWidth;
+      const newHeight = canvas.parentElement.clientHeight;
+      
+      if (newWidth > 0 && newHeight > 0) {
+        width = newWidth;
+        height = newHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        // Reposition any particles that might be out of bounds after a resize
+        if (particlesRef.current && particlesRef.current.length > 0) {
+          particlesRef.current.forEach((p) => {
+            if (p.x > width) p.x = Math.random() * width;
+            if (p.y > height) p.y = Math.random() * height;
+          });
+        }
+      }
     };
+
+    handleResize();
 
     const resizeObserver = new ResizeObserver(() => {
       handleResize();
     });
-    resizeObserver.observe(canvas.parentElement);
-    handleResize();
 
-    // Initialize particles
-    const particleCount = 80;
+    if (canvas.parentElement) {
+      resizeObserver.observe(canvas.parentElement);
+    }
+    window.addEventListener('resize', handleResize);
+
+    // Initialize particles across full width and height
+    const particleCount = 75;
     particlesRef.current = Array.from({ length: particleCount }).map(() => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 0.6,
-      vy: (Math.random() - 0.5) * 0.6,
-      radius: Math.random() * 1.5 + 1.5,
-      opacity: Math.random() * 0.5 + 0.3,
+      x: Math.random() * (width || 800),
+      y: Math.random() * (height || 600),
+      vx: (Math.random() - 0.5) * 0.55,
+      vy: (Math.random() - 0.5) * 0.55,
+      radius: Math.random() * 1.5 + 1.2,
+      opacity: Math.random() * 0.45 + 0.25,
     }));
 
     // Mouse events
@@ -58,6 +76,11 @@ const ParticleNetwork = ({ className = '' }) => {
 
     // Animation loop
     const render = () => {
+      if (width <= 0 || height <= 0) {
+        animationRef.current = requestAnimationFrame(render);
+        return;
+      }
+
       ctx.clearRect(0, 0, width, height);
       const particles = particlesRef.current;
       const mouse = mouseRef.current;
@@ -101,8 +124,8 @@ const ParticleNetwork = ({ className = '' }) => {
           const dy = p1.y - p2.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          if (dist < 120) {
-            let opacity = (1 - dist / 120) * 0.15;
+          if (dist < 125) {
+            let opacity = (1 - dist / 125) * 0.15;
             let lineWidth = 0.5;
 
             // Highlight near mouse
@@ -138,6 +161,7 @@ const ParticleNetwork = ({ className = '' }) => {
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationRef.current);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
@@ -146,7 +170,7 @@ const ParticleNetwork = ({ className = '' }) => {
 
   return (
     <div className={`pointer-events-auto ${className}`}>
-      <canvas ref={canvasRef} className="block w-full h-full" />
+      <canvas ref={canvasRef} className="block w-full h-full" style={{ width: '100%', height: '100%' }} />
     </div>
   );
 };
