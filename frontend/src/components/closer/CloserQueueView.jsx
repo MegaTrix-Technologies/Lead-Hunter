@@ -522,7 +522,7 @@ const CloserQueueView = () => {
         <div className="fixed inset-0 z-[9999] bg-[#060606] flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150">
           
           {/* 1. TOP BAR / WORKSTATION HEADER */}
-          <div className="px-6 py-4 bg-[#0A0A0A] border-b border-[#202020] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0">
+          <div className="px-3 sm:px-6 py-3 sm:py-4 bg-[#0A0A0A] border-b border-[#202020] flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 shrink-0">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -693,7 +693,7 @@ const CloserQueueView = () => {
           </div>
 
           {/* 3. WORKSPACE BODY: 2-COLUMN CRM WORKSTATION */}
-          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#080808]">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 bg-[#080808]">
             
             {/* LEFT COLUMN (col-span-5): Lead Dossier, Agent Handoff, Call Timeline */}
             <div className="lg:col-span-5 space-y-5">

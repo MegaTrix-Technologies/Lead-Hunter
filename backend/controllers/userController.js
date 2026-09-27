@@ -60,6 +60,7 @@ exports.getUsers = async (req, res) => {
           referredUsersCount,
           status: u.status,
           dailyGmbLimit: limit,
+          allowMobileAccess: Boolean(u.allowMobileAccess || isSuperAdmin),
           usedToday,
           totalExtracted,
           remainingToday,
@@ -83,7 +84,7 @@ exports.getUsers = async (req, res) => {
  */
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, dailyGmbLimit, roles, commissionRates, referredBy, referralPercent } = req.body;
+    const { name, email, password, dailyGmbLimit, roles, commissionRates, referredBy, referralPercent, allowMobileAccess } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -103,6 +104,7 @@ exports.createUser = async (req, res) => {
 
     const limit = parseInt(dailyGmbLimit, 10);
     const assignedRoles = Array.isArray(roles) && roles.length > 0 ? roles : ['sales_agent'];
+    const isSuper = assignedRoles.includes('super_admin');
     const rates = {
       leadGenPercent: assignedRoles.includes('sales_agent') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.leadGenPercent) || 0)) : 0,
       closerPercent: assignedRoles.includes('sales_closer') ? Math.min(100, Math.max(0, parseFloat(commissionRates?.closerPercent) || 0)) : 0,
@@ -127,7 +129,7 @@ exports.createUser = async (req, res) => {
       name: name.trim(),
       email: cleanEmail,
       password,
-      role: assignedRoles.includes('super_admin') ? 'superadmin' : 'agent',
+      role: isSuper ? 'superadmin' : 'agent',
       roles: assignedRoles,
       commissionRates: rates,
       referredBy: resolvedReferredBy,
@@ -135,6 +137,7 @@ exports.createUser = async (req, res) => {
       referralPercent: resolvedReferralPercent,
       status: 'active',
       dailyGmbLimit: isNaN(limit) || limit < 1 ? 150 : limit,
+      allowMobileAccess: isSuper ? true : Boolean(allowMobileAccess),
       mustChangePassword: true,
       createdBy: req.user._id
     });
@@ -155,6 +158,7 @@ exports.createUser = async (req, res) => {
         referralPercent: user.referralPercent,
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit,
+        allowMobileAccess: Boolean(user.allowMobileAccess || isSuper),
         mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt
       }
@@ -166,12 +170,12 @@ exports.createUser = async (req, res) => {
 };
 
 /**
- * Super Admin: Update user profile (roles, commissions, limit, status, password, referral link)
+ * Super Admin: Update user profile (roles, commissions, limit, status, password, referral link, mobile access)
  */
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, dailyGmbLimit, status, password, roles, commissionRates, referredBy, referralPercent } = req.body;
+    const { name, dailyGmbLimit, status, password, roles, commissionRates, referredBy, referralPercent, allowMobileAccess } = req.body;
 
     const user = await User.findById(id);
     if (!user) {
@@ -197,6 +201,9 @@ exports.updateUser = async (req, res) => {
         user.dailyGmbLimit = parsed;
       }
     }
+    if (allowMobileAccess !== undefined) {
+      user.allowMobileAccess = isTargetSuperAdmin ? true : Boolean(allowMobileAccess);
+    }
     if (password && password.trim().length >= 6) {
       user.password = password.trim();
       user.mustChangePassword = true;
@@ -208,6 +215,9 @@ exports.updateUser = async (req, res) => {
       }
       user.roles = finalRoles;
       user.role = finalRoles.includes('super_admin') ? 'superadmin' : 'agent';
+      if (finalRoles.includes('super_admin')) {
+        user.allowMobileAccess = true;
+      }
       user.markModified('roles');
     }
     if (commissionRates && typeof commissionRates === 'object') {
@@ -268,7 +278,8 @@ exports.updateUser = async (req, res) => {
         referredByName: user.referredByName,
         referralPercent: user.referralPercent,
         status: user.status,
-        dailyGmbLimit: user.dailyGmbLimit
+        dailyGmbLimit: user.dailyGmbLimit,
+        allowMobileAccess: Boolean(user.allowMobileAccess || isTargetSuperAdmin)
       }
     });
   } catch (error) {

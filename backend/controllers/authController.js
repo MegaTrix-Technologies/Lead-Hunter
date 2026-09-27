@@ -28,12 +28,14 @@ exports.seedSuperAdmin = async () => {
         roles: ['super_admin'],
         commissionRates: { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         status: 'active',
-        dailyGmbLimit: 999999
+        dailyGmbLimit: 999999,
+        allowMobileAccess: true
       });
       console.log('✔ Default Super Admin initialized.');
-    } else if (!admin.roles || !admin.roles.includes('super_admin')) {
+    } else if (!admin.roles || !admin.roles.includes('super_admin') || !admin.allowMobileAccess) {
       admin.roles = ['super_admin'];
       admin.role = 'superadmin';
+      admin.allowMobileAccess = true;
       admin.markModified('roles');
       await admin.save();
     }
@@ -112,7 +114,7 @@ exports.login = async (req, res) => {
     );
 
     // Compute today's usage & quota
-    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
+    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin' || user.email === 'sales@megatrixai.com';
     let usedToday = 0;
     if (!isSuperAdmin) {
       usedToday = await Lead.countDocuments({
@@ -124,6 +126,7 @@ exports.login = async (req, res) => {
     const dailyLimit = user.dailyGmbLimit || 150;
     const remainingToday = isSuperAdmin ? 999999 : Math.max(0, dailyLimit - usedToday);
     const userRoles = user.roles && user.roles.length > 0 ? user.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
+    const allowMobileAccess = Boolean(user.allowMobileAccess || isSuperAdmin);
 
     return res.json({
       success: true,
@@ -137,6 +140,7 @@ exports.login = async (req, res) => {
         roles: userRoles,
         commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         dailyGmbLimit: user.dailyGmbLimit,
+        allowMobileAccess,
         mustChangePassword: Boolean(user.mustChangePassword),
         loginTime: new Date().toISOString()
       },
@@ -160,7 +164,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = req.user;
-    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin';
+    const isSuperAdmin = user.roles ? user.roles.includes('super_admin') : user.role === 'superadmin' || user.email === 'sales@megatrixai.com';
     
     let usedToday = 0;
     if (!isSuperAdmin) {
@@ -173,6 +177,7 @@ exports.getMe = async (req, res) => {
     const dailyLimit = user.dailyGmbLimit || 150;
     const remainingToday = isSuperAdmin ? 999999 : Math.max(0, dailyLimit - usedToday);
     const userRoles = user.roles && user.roles.length > 0 ? user.roles : (isSuperAdmin ? ['super_admin'] : ['sales_agent']);
+    const allowMobileAccess = Boolean(user.allowMobileAccess || isSuperAdmin);
 
     res.json({
       success: true,
@@ -186,6 +191,7 @@ exports.getMe = async (req, res) => {
         commissionRates: user.commissionRates || { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 },
         status: user.status,
         dailyGmbLimit: user.dailyGmbLimit,
+        allowMobileAccess,
         mustChangePassword: Boolean(user.mustChangePassword)
       },
       quota: {

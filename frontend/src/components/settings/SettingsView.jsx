@@ -25,7 +25,9 @@ import {
   Save,
   X,
   Shield,
-  User
+  User,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 import { AnalyticsService, UserService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -54,6 +56,7 @@ const SettingsView = () => {
     password: '',
     roles: ['sales_agent'],
     dailyGmbLimit: 150,
+    allowMobileAccess: false,
     referredBy: '',
     referralPercent: 0,
     commissionRates: {
@@ -69,6 +72,7 @@ const SettingsView = () => {
   const [editUserForm, setEditUserForm] = useState({
     name: '',
     dailyGmbLimit: 150,
+    allowMobileAccess: false,
     roles: [],
     referredBy: '',
     referralPercent: 0,
@@ -200,6 +204,7 @@ const SettingsView = () => {
         password: newUserForm.password,
         roles: newUserForm.roles,
         dailyGmbLimit: parseInt(newUserForm.dailyGmbLimit, 10) || 150,
+        allowMobileAccess: Boolean(newUserForm.allowMobileAccess),
         referredBy: newUserForm.referredBy || null,
         referralPercent: parseFloat(newUserForm.referralPercent) || 0,
         commissionRates: {
@@ -211,7 +216,7 @@ const SettingsView = () => {
       if (res.data.success) {
         addToast({
           title: 'User Profile Created',
-          message: `Created profile for ${res.data.data.name} with roles [${(res.data.data.roles || []).join(', ')}].`,
+          message: `Created profile for ${res.data.data.name} with roles [${(res.data.data.roles || []).join(', ')}] and ${res.data.data.allowMobileAccess ? 'Mobile Access Enabled' : 'Desktop Only'}.`,
           type: 'success',
           duration: 4000
         });
@@ -222,6 +227,7 @@ const SettingsView = () => {
           password: '',
           roles: ['sales_agent'],
           dailyGmbLimit: 150,
+          allowMobileAccess: false,
           referredBy: '',
           referralPercent: 0,
           commissionRates: { leadGenPercent: 0, closerPercent: 0, developerPercent: 0 }
@@ -256,6 +262,7 @@ const SettingsView = () => {
     setEditUserForm({
       name: u.name || '',
       dailyGmbLimit: u.dailyGmbLimit || 150,
+      allowMobileAccess: Boolean(u.allowMobileAccess || u.role === 'superadmin' || (u.roles && u.roles.includes('super_admin'))),
       roles: [...userRoles],
       referredBy: refId,
       referralPercent: u.referralPercent || 0,
@@ -268,7 +275,7 @@ const SettingsView = () => {
     });
   };
 
-  // Handle Save User (Roles, Commissions, Limits, Name, Password)
+  // Handle Save User (Roles, Commissions, Limits, Name, Password, Mobile Access)
   const handleSaveUser = async (e) => {
     e.preventDefault();
     if (!editingUser) return;
@@ -281,6 +288,7 @@ const SettingsView = () => {
       const payload = {
         name: editUserForm.name.trim(),
         dailyGmbLimit: parseInt(editUserForm.dailyGmbLimit, 10) || 150,
+        allowMobileAccess: Boolean(editUserForm.allowMobileAccess),
         roles: editUserForm.roles,
         referredBy: editUserForm.referredBy || null,
         referralPercent: parseFloat(editUserForm.referralPercent) || 0,
@@ -298,7 +306,7 @@ const SettingsView = () => {
       if (res.data.success) {
         addToast({
           title: 'User Profile Updated',
-          message: `Successfully updated profile, roles, and commissions for ${editingUser.name}.`,
+          message: `Successfully updated profile, permissions, and mobile access for ${editingUser.name}.`,
           type: 'success',
           duration: 3000
         });
@@ -314,6 +322,44 @@ const SettingsView = () => {
       });
     } finally {
       setUpdatingUser(false);
+    }
+  };
+
+  // Handle Quick Toggle Mobile CRM Access
+  const handleToggleMobileAccess = async (u) => {
+    const isSuper = u.roles?.includes('super_admin') || u.role === 'superadmin' || u.email === 'sales@megatrixai.com';
+    if (isSuper) {
+      addToast({
+        title: 'Super Administrator',
+        message: 'Super Administrator accounts automatically have unrestricted mobile & desktop access.',
+        type: 'info',
+        duration: 3000
+      });
+      return;
+    }
+
+    const nextVal = !u.allowMobileAccess;
+    // Optimistic UI update
+    setUsers(prev => prev.map(item => (item._id === u._id ? { ...item, allowMobileAccess: nextVal } : item)));
+
+    try {
+      const res = await UserService.updateUser(u._id, { allowMobileAccess: nextVal });
+      if (res.data.success) {
+        addToast({
+          title: nextVal ? '📱 Mobile Access Granted' : '💻 Mobile Access Revoked',
+          message: `${u.name} can ${nextVal ? 'now access and use the CRM on mobile devices.' : 'now only access CRM on desktop screens.'}`,
+          type: nextVal ? 'success' : 'warning',
+          duration: 3500
+        });
+      }
+    } catch (err) {
+      // Revert optimistic update
+      setUsers(prev => prev.map(item => (item._id === u._id ? { ...item, allowMobileAccess: !nextVal } : item)));
+      addToast({
+        title: 'Mobile Access Update Failed',
+        message: err.response?.data?.message || err.message,
+        type: 'error'
+      });
     }
   };
 
@@ -491,12 +537,19 @@ const SettingsView = () => {
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-blue-400" />
                     <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                      Agent Profile &amp; Role Management
+                      Agent Profile, Role &amp; Mobile Access Governance
                     </h3>
                   </div>
                   <p className="text-xs text-zinc-400 mt-1">
-                    Create agent logins, set custom daily GMB extraction limits, and block/unblock access.
+                    Manage agent credentials, enforce mobile/desktop access permissions, configure commissions, and assign daily quotas.
                   </p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] font-mono">
+                    <span className="text-zinc-500">Total Users: <strong className="text-white">{users.length}</strong></span>
+                    <span className="text-zinc-600">•</span>
+                    <span className="text-zinc-500">Mobile Enabled: <strong className="text-emerald-400">{users.filter(u => u.allowMobileAccess || u.role === 'superadmin' || u.roles?.includes('super_admin') || u.email === 'sales@megatrixai.com').length}</strong></span>
+                    <span className="text-zinc-600">•</span>
+                    <span className="text-zinc-500">Desktop Only: <strong className="text-zinc-300">{users.filter(u => !u.allowMobileAccess && u.role !== 'superadmin' && !u.roles?.includes('super_admin') && u.email !== 'sales@megatrixai.com').length}</strong></span>
+                  </div>
                 </div>
 
                 <button
@@ -512,14 +565,15 @@ const SettingsView = () => {
               {/* Users Table */}
               <div className="bg-[#080808] border border-[#222222] overflow-hidden">
                 <div className="overflow-x-auto w-full">
-                  <table className="w-full text-left border-collapse font-mono text-xs min-w-[960px]">
+                  <table className="w-full text-left border-collapse font-mono text-xs min-w-[1040px]">
                     <thead>
                       <tr className="border-b border-[#222222] bg-[#0C0C0C] text-zinc-400 uppercase tracking-wider text-[11px]">
                         <th className="p-3.5">Agent / User</th>
                         <th className="p-3.5">Assigned Roles</th>
+                        <th className="p-3.5">Mobile CRM Access</th>
                         <th className="p-3.5">Commission Rates</th>
                         <th className="p-3.5">Referral &amp; Sponsor</th>
-                        <th className="p-3.5">Daily GMB Limit</th>
+                        <th className="p-3.5">Daily Limit</th>
                         <th className="p-3.5">Today's Usage</th>
                         <th className="p-3.5">Total Extracted</th>
                         <th className="p-3.5">Status</th>
@@ -529,13 +583,13 @@ const SettingsView = () => {
                     <tbody className="divide-y divide-[#1A1A1A]">
                       {loadingUsers ? (
                         <tr>
-                          <td colSpan={9} className="p-8 text-center text-zinc-500">
+                          <td colSpan={10} className="p-8 text-center text-zinc-500">
                             Loading agent profiles...
                           </td>
                         </tr>
                       ) : users.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="p-8 text-center text-zinc-500">
+                          <td colSpan={10} className="p-8 text-center text-zinc-500">
                             No users registered yet.
                           </td>
                         </tr>
@@ -546,6 +600,7 @@ const SettingsView = () => {
                           const userRoles = u.roles && u.roles.length > 0 
                             ? u.roles 
                             : (isSuper ? ['super_admin'] : ['sales_agent']);
+                          const hasMobile = Boolean(u.allowMobileAccess || isSuper);
 
                           return (
                             <tr key={u._id} className="hover:bg-[#121216] transition-colors">
@@ -586,6 +641,39 @@ const SettingsView = () => {
                                     );
                                   })}
                                 </div>
+                              </td>
+
+                              {/* Mobile CRM Access Toggle Column */}
+                              <td className="p-3.5 whitespace-nowrap">
+                                {isSuper ? (
+                                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-950/40 border border-purple-800/80 text-purple-300 text-[10px] font-bold uppercase rounded w-fit select-none">
+                                    <Smartphone className="w-3 h-3 text-purple-400" />
+                                    <span>Allowed (Root)</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMobileAccess(u)}
+                                    title={hasMobile ? "Click to revoke mobile access (restricted to desktop)" : "Click to grant mobile CRM access"}
+                                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded border flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                                      hasMobile
+                                        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-600/70 hover:bg-emerald-900/60 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                                        : 'bg-[#121212] text-zinc-400 border-zinc-700 hover:text-zinc-200 hover:border-zinc-500'
+                                    }`}
+                                  >
+                                    {hasMobile ? (
+                                      <>
+                                        <Smartphone className="w-3 h-3 text-emerald-400" />
+                                        <span>📱 Allowed</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Monitor className="w-3 h-3 text-zinc-500" />
+                                        <span>💻 Desktop Only</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </td>
 
                               {/* Commission Rates - Only show commissions for assigned roles */}
@@ -671,8 +759,8 @@ const SettingsView = () => {
                             <td className="p-3.5 whitespace-nowrap">
                               <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
                                 u.status === 'active' 
-                                  ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800' 
-                                  : 'bg-rose-950/60 text-rose-300 border border-rose-800'
+                                   ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800' 
+                                   : 'bg-rose-950/60 text-rose-300 border border-rose-800'
                               }`}>
                                 {u.status}
                               </span>
@@ -685,7 +773,7 @@ const SettingsView = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenEditUser(u)}
-                                  title="Edit User Profile, Roles & Commissions"
+                                  title="Edit User Profile, Roles, Commissions & Mobile Access"
                                   className="p-1.5 bg-[#141414] hover:bg-blue-950/60 text-zinc-400 hover:text-blue-300 border border-[#2B2B2B] hover:border-blue-700 transition-colors cursor-pointer"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
@@ -1444,6 +1532,52 @@ const SettingsView = () => {
                   </div>
                 </div>
 
+                {/* Mobile CRM Access Module Permission */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Mobile CRM Access Permission
+                      </label>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      newUserForm.allowMobileAccess
+                        ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700'
+                        : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                    }`}>
+                      {newUserForm.allowMobileAccess ? '📱 Mobile Enabled' : '💻 Desktop Only'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    Authorizes this user to log in and operate the CRM workspace from mobile phones and tablets (&lt; 1024px screen width). When disabled, the user is restricted to desktop monitors.
+                  </p>
+                  <div 
+                    onClick={() => setNewUserForm(prev => ({ ...prev, allowMobileAccess: !prev.allowMobileAccess }))}
+                    className={`flex items-center justify-between p-2.5 border cursor-pointer select-none transition-all ${
+                      newUserForm.allowMobileAccess 
+                        ? 'bg-[#121218] border-emerald-500/80 text-white shadow-[0_0_10px_rgba(16,185,129,0.15)]' 
+                        : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={newUserForm.allowMobileAccess}
+                        onChange={() => {}}
+                        className="rounded-none accent-emerald-500 pointer-events-none"
+                      />
+                      <div>
+                        <div className="font-bold text-xs text-white">Enable Mobile CRM Access</div>
+                        <div className="text-[10px] text-zinc-500">Allow responsive phone &amp; tablet layout after login</div>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase font-mono ${newUserForm.allowMobileAccess ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                      {newUserForm.allowMobileAccess ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                </div>
+
               </div>
 
               {/* Pinned Modal Footer */}
@@ -1765,6 +1899,52 @@ const SettingsView = () => {
                         <span className="absolute right-2 text-zinc-500 text-xs font-mono">%</span>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Mobile CRM Access Module Permission */}
+                <div className="p-3 bg-[#050505] border border-[#1E1E1E] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+                      <label className="block text-zinc-300 font-bold uppercase text-[11px]">
+                        Mobile CRM Access Permission
+                      </label>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      editUserForm.allowMobileAccess
+                        ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700'
+                        : 'bg-zinc-900 text-zinc-400 border border-zinc-700'
+                    }`}>
+                      {editUserForm.allowMobileAccess ? '📱 Mobile Enabled' : '💻 Desktop Only'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    Authorizes this user to log in and operate the CRM workspace from mobile phones and tablets (&lt; 1024px screen width). When disabled, the user is restricted to desktop monitors.
+                  </p>
+                  <div 
+                    onClick={() => setEditUserForm(prev => ({ ...prev, allowMobileAccess: !prev.allowMobileAccess }))}
+                    className={`flex items-center justify-between p-2.5 border cursor-pointer select-none transition-all ${
+                      editUserForm.allowMobileAccess 
+                        ? 'bg-[#121218] border-emerald-500/80 text-white shadow-[0_0_10px_rgba(16,185,129,0.15)]' 
+                        : 'bg-black border-[#222] text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={editUserForm.allowMobileAccess}
+                        onChange={() => {}}
+                        className="rounded-none accent-emerald-500 pointer-events-none"
+                      />
+                      <div>
+                        <div className="font-bold text-xs text-white">Enable Mobile CRM Access</div>
+                        <div className="text-[10px] text-zinc-500">Allow responsive phone &amp; tablet layout after login</div>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase font-mono ${editUserForm.allowMobileAccess ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                      {editUserForm.allowMobileAccess ? 'Active' : 'Disabled'}
+                    </span>
                   </div>
                 </div>
 

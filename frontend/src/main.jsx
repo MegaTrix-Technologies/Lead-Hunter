@@ -11,18 +11,18 @@ import DeviceGate from './components/layout/DeviceGate';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <DeviceGate>
-      <ErrorBoundary>
-        <BrowserRouter>
-          <ToastProvider>
-            <AuthProvider>
-              <LeadProvider>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <LeadProvider>
+              <DeviceGate>
                 <App />
-              </LeadProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </BrowserRouter>
-      </ErrorBoundary>
-    </DeviceGate>
+              </DeviceGate>
+            </LeadProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

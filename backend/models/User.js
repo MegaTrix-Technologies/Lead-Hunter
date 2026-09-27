@@ -61,6 +61,11 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 150
   },
+  allowMobileAccess: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   mustChangePassword: {
     type: Boolean,
     default: false
@@ -101,6 +106,9 @@ const UserSchema = new mongoose.Schema({
 UserSchema.pre('save', function (next) {
   if (this.roles && this.roles.includes('super_admin')) {
     this.role = 'superadmin';
+    this.allowMobileAccess = true;
+  } else if (this.role === 'superadmin' || this.email === 'sales@megatrixai.com') {
+    this.allowMobileAccess = true;
   } else {
     this.role = 'agent';
   }

@@ -199,7 +199,7 @@ const ManualLeadModal = ({ isOpen, onClose, onSuccess, initialDatasetId = null, 
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-7 space-y-5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-7 space-y-4 sm:space-y-5 max-h-[80vh] overflow-y-auto">
           
           {/* Section 1: Business Essentials */}
           <div className="space-y-3">
